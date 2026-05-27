@@ -553,30 +553,29 @@ input, select {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
 }
 
-.pdf-controls {
+.pdf-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.pdf-scroll-container {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-}
-
-.pdf-controls button {
-  padding: 6px 14px;
-}
-
-.pdf-page-container {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: auto;
+  gap: 0;
   max-width: 100%;
+}
+
+.pdf-page {
   background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
 .pdf-text-layer {
-  opacity: 0.2;
-  --text-div: transparent;
+  line-height: 1;
 }
 
 .pdf-text-layer span {
@@ -584,7 +583,7 @@ input, select {
 }
 
 .pdf-text-layer span::selection {
-  background: rgba(79, 70, 229, 0.3);
+  background: rgba(79, 70, 229, 0.35);
 }
 
 .pdf-viewer-status {

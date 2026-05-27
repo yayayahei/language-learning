@@ -131,6 +131,7 @@ func (d *DB) InitSchema() error {
 		filename VARCHAR(512) NOT NULL,
 		title VARCHAR(512) DEFAULT '',
 		file_path VARCHAR(1024) NOT NULL,
+			last_page INT DEFAULT 1,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	)`)
 	if err != nil {
@@ -151,6 +152,9 @@ func (d *DB) InitSchema() error {
 	if err != nil {
 		return err
 	}
+
+	// Migration: add last_page to pdf_documents (ignore error if already applied)
+	d.conn.Exec("ALTER TABLE pdf_documents ADD COLUMN last_page INT DEFAULT 1")
 
 	// Migration: allow weak_points from PDF sources (ignore error if already applied)
 	d.conn.Exec("ALTER TABLE weak_points MODIFY video_id VARCHAR(32) NULL")
@@ -224,6 +228,27 @@ func (d *DB) ListVideos() ([]map[string]interface{}, error) {
 		})
 	}
 	return videos, nil
+}
+
+// PDF methods
+func (d *DB) SavePDFPosition(pdfID string, page int) error {
+	if d.conn == nil {
+		return ErrDBUnavailable
+	}
+	_, err := d.conn.Exec("UPDATE pdf_documents SET last_page = ? WHERE id = ?", page, pdfID)
+	return err
+}
+
+func (d *DB) GetPDFPosition(pdfID string) (int, error) {
+	if d.conn == nil {
+		return 1, ErrDBUnavailable
+	}
+	var page int
+	err := d.conn.QueryRow("SELECT COALESCE(last_page, 1) FROM pdf_documents WHERE id = ?", pdfID).Scan(&page)
+	if err != nil {
+		return 1, nil
+	}
+	return page, nil
 }
 
 // Transcript methods

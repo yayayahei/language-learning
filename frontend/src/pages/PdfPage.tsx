@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import PdfViewer from '../components/PdfViewer'
 import SelectionMenu from '../components/SelectionMenu'
@@ -7,6 +7,7 @@ type PdfDoc = {
   id: string
   filename: string
   title: string
+  last_page?: number
   created_at: string
 }
 
@@ -24,6 +25,8 @@ function PdfPage() {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [selection, setSelection] = useState<Selection | null>(null)
+  const [initialPage, setInitialPage] = useState<number | undefined>(undefined)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchPdfs = () => {
     fetch('/api/pdfs')
@@ -34,6 +37,20 @@ function PdfPage() {
   useEffect(() => {
     fetchPdfs()
   }, [])
+
+  // Fetch saved position when entering a PDF
+  useEffect(() => {
+    if (pdfId) {
+      fetch(`/api/pdfs/${pdfId}/position`)
+        .then((r) => r.json())
+        .then((data) => {
+          setInitialPage(data.last_page || 1)
+        })
+        .catch(() => setInitialPage(1))
+    } else {
+      setInitialPage(undefined)
+    }
+  }, [pdfId])
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -72,6 +89,26 @@ function PdfPage() {
     setSelection({ text, pageNum, x, y })
   }
 
+  const handlePageChange = (pageNum: number) => {
+    if (!pdfId) return
+    // Debounce: save position at most once per second
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      fetch(`/api/pdfs/${pdfId}/position`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ page: pageNum }),
+      })
+    }, 1000)
+  }
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [])
+
   // PDF reader view when a pdfId is selected
   if (pdfId) {
     return (
@@ -79,7 +116,12 @@ function PdfPage() {
         <button className="back-btn" onClick={() => navigate('/pdf')}>
           Back to PDFs
         </button>
-        <PdfViewer url={`/api/pdfs/${pdfId}/file`} onSelection={handleSelection} />
+        <PdfViewer
+          url={`/api/pdfs/${pdfId}/file`}
+          initialPage={initialPage}
+          onSelection={handleSelection}
+          onPageChange={handlePageChange}
+        />
         {selection && (
           <SelectionMenu
             text={selection.text}

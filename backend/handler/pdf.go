@@ -2,6 +2,7 @@ package handler
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,6 +34,8 @@ func (h *PDFHandler) Register(r chi.Router) {
 	r.Post("/api/pdfs", h.upload)
 	r.Get("/api/pdfs", h.list)
 	r.Get("/api/pdfs/{id}/file", h.serveFile)
+	r.Get("/api/pdfs/{id}/position", h.getPosition)
+	r.Put("/api/pdfs/{id}/position", h.savePosition)
 	r.Delete("/api/pdfs/{id}", h.delete)
 }
 
@@ -88,7 +91,7 @@ func (h *PDFHandler) upload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PDFHandler) list(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.Conn().Query("SELECT id, filename, title, created_at FROM pdf_documents ORDER BY created_at DESC")
+	rows, err := h.db.Conn().Query("SELECT id, filename, title, last_page, created_at FROM pdf_documents ORDER BY created_at DESC")
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to list PDFs")
 		return
@@ -98,13 +101,15 @@ func (h *PDFHandler) list(w http.ResponseWriter, r *http.Request) {
 	var pdfs []map[string]interface{}
 	for rows.Next() {
 		var id, filename, title, createdAt string
-		if err := rows.Scan(&id, &filename, &title, &createdAt); err != nil {
+		var lastPage int
+		if err := rows.Scan(&id, &filename, &title, &lastPage, &createdAt); err != nil {
 			continue
 		}
 		pdfs = append(pdfs, map[string]interface{}{
 			"id":         id,
 			"filename":   filename,
 			"title":      title,
+			"last_page":  lastPage,
 			"created_at": createdAt,
 		})
 	}
@@ -149,6 +154,36 @@ func (h *PDFHandler) serveFile(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/pdf")
 	http.ServeFile(w, r, filePath)
+}
+
+func (h *PDFHandler) getPosition(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	page, err := h.db.GetPDFPosition(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to get position")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"last_page": page})
+}
+
+func (h *PDFHandler) savePosition(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req struct {
+		Page int `json:"page"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Page < 1 {
+		writeError(w, http.StatusBadRequest, "page must be >= 1")
+		return
+	}
+	if err := h.db.SavePDFPosition(id, req.Page); err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to save position")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func uuid() string {
