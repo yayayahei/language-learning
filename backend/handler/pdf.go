@@ -13,7 +13,7 @@ import (
 	"github.com/yayayahei/language-learning/backend/db"
 )
 
-const maxUploadSize = 20 << 20 // 20 MB
+const maxUploadSize = 50 << 20 // 50 MB
 
 type PDFHandler struct {
 	db        *db.DB
@@ -37,8 +37,8 @@ func (h *PDFHandler) Register(r chi.Router) {
 
 func (h *PDFHandler) upload(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		writeError(w, http.StatusBadRequest, "File too large (max 20MB)")
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "File too large (max 50MB)")
 		return
 	}
 

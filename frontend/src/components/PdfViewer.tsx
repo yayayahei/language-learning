@@ -42,25 +42,43 @@ function PdfViewer({ url, onSelection }: PdfViewerProps) {
       const page = await pdf.getPage(num)
       const viewport = page.getViewport({ scale: 1.5 })
       const canvas = canvasRef.current
-      const ctx = canvas.getContext('2d')!
       canvas.width = viewport.width
       canvas.height = viewport.height
+      const ctx = canvas.getContext('2d')!
 
-      await page.render({ canvasContext: ctx, viewport }).promise
+      await page.render({ canvas, canvasContext: ctx, viewport }).promise
 
-      // Render text layer
+      // Manual text layer for text selection
       const textLayer = textLayerRef.current
       textLayer.innerHTML = ''
       textLayer.style.width = `${viewport.width}px`
       textLayer.style.height = `${viewport.height}px`
+      textLayer.style.position = 'absolute'
+      textLayer.style.top = '0'
+      textLayer.style.left = '0'
 
       const textContent = await page.getTextContent()
-      pdfjsLib.renderTextLayer({
-        textContentSource: textContent,
-        container: textLayer,
-        viewport,
-        textDivs: [],
-      })
+      const { items } = textContent as { items: Array<{ str: string; transform: number[]; width: number; height: number }> }
+
+      for (const item of items) {
+        if (!item.str) continue
+        const tx = item.transform
+        const fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1])
+        const x = tx[4]
+        const y = tx[5] - fontSize
+
+        const span = document.createElement('span')
+        span.textContent = item.str
+        span.style.position = 'absolute'
+        span.style.left = `${x}px`
+        span.style.top = `${viewport.height - y - fontSize}px`
+        span.style.fontSize = `${fontSize * 1}px`
+        span.style.fontFamily = 'sans-serif'
+        span.style.color = 'transparent'
+        span.style.whiteSpace = 'pre'
+        span.setAttribute('data-text', item.str)
+        textLayer.appendChild(span)
+      }
     },
     [pdf],
   )
@@ -122,11 +140,6 @@ function PdfViewer({ url, onSelection }: PdfViewerProps) {
         <div
           ref={textLayerRef}
           className="pdf-text-layer"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-          }}
           onPointerUp={handlePointerUp}
         />
       </div>
