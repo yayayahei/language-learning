@@ -33,6 +33,7 @@ func (h *PDFHandler) Register(r chi.Router) {
 	r.Post("/api/pdfs", h.upload)
 	r.Get("/api/pdfs", h.list)
 	r.Get("/api/pdfs/{id}/file", h.serveFile)
+	r.Delete("/api/pdfs/{id}", h.delete)
 }
 
 func (h *PDFHandler) upload(w http.ResponseWriter, r *http.Request) {
@@ -109,6 +110,29 @@ func (h *PDFHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"pdfs": pdfs})
+}
+
+func (h *PDFHandler) delete(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	// Get file path before deleting the record
+	var filePath string
+	err := h.db.Conn().QueryRow("SELECT file_path FROM pdf_documents WHERE id = ?", id).Scan(&filePath)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "PDF not found")
+		return
+	}
+
+	_, err = h.db.Conn().Exec("DELETE FROM pdf_documents WHERE id = ?", id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to delete PDF")
+		return
+	}
+
+	// Remove the file from disk
+	os.Remove(filePath)
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 func (h *PDFHandler) serveFile(w http.ResponseWriter, r *http.Request) {

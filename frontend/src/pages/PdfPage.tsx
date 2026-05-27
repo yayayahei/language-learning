@@ -35,6 +35,12 @@ function PdfPage() {
     fetchPdfs()
   }, [])
 
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    await fetch(`/api/pdfs/${id}`, { method: 'DELETE' })
+    fetchPdfs()
+  }
+
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setUploadError('')
@@ -106,6 +112,9 @@ function PdfPage() {
           <div key={pdf.id} className="pdf-item" onClick={() => navigate(`/pdf/${pdf.id}`)}>
             <span className="pdf-title">{pdf.title || pdf.filename}</span>
             <span className="pdf-date">{new Date(pdf.created_at).toLocaleDateString()}</span>
+            <button className="delete-btn" onClick={(e) => handleDelete(pdf.id, e)}>
+              x
+            </button>
           </div>
         ))}
         {pdfs.length === 0 && (
