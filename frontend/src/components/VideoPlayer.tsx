@@ -18,28 +18,38 @@ type Props = {
   onTimeUpdate?: (time: number) => void
   onPlayerEvent?: (event: PlayerEvent) => void
   markers?: number[]
+  seekRef?: React.MutableRefObject<((ms: number) => void) | null>
+  initialPositionMs?: number
 }
 
-function VideoPlayer({ videoId, onTimeUpdate, onPlayerEvent, markers }: Props) {
+function VideoPlayer({ videoId, onTimeUpdate, onPlayerEvent, markers, seekRef, initialPositionMs }: Props) {
   const playerRef = useRef<any>(null)
   const intervalRef = useRef<number>(0)
   const lastTimeRef = useRef(0)
   const lastStateRef = useRef(-1)
 
   const onReady = useCallback((event: any) => {
-    event.target.playVideo()
-  }, [])
+    const player = event.target
+    // Expose seek function to parent
+    if (seekRef) {
+      seekRef.current = (ms: number) => {
+        player.seekTo(ms / 1000, true)
+      }
+    }
+    // Resume from saved position
+    if (initialPositionMs && initialPositionMs > 0) {
+      player.seekTo(initialPositionMs / 1000, true)
+    }
+    player.playVideo()
+  }, [seekRef, initialPositionMs])
 
   const onStateChange = useCallback((event: any) => {
     const player = event.target
     const currentTime = player.getCurrentTime() * 1000
 
-    // Pause detection: state 2 = paused
     if (event.data === 2 && lastStateRef.current === 1) {
       onPlayerEvent?.({ type: 'pause', timestamp: currentTime })
     }
-
-    // Play after pause
     if (event.data === 1) {
       onPlayerEvent?.({ type: 'play', timestamp: currentTime })
     }
@@ -50,12 +60,8 @@ function VideoPlayer({ videoId, onTimeUpdate, onPlayerEvent, markers }: Props) {
   useEffect(() => {
     if (!videoId) return
 
-    // Clear previous interval
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-    }
+    if (intervalRef.current) clearInterval(intervalRef.current)
 
-    // Load YouTube API
     if (!window.YT) {
       const tag = document.createElement('script')
       tag.src = 'https://www.youtube.com/iframe_api'
@@ -82,13 +88,11 @@ function VideoPlayer({ videoId, onTimeUpdate, onPlayerEvent, markers }: Props) {
         },
       })
 
-      // Poll currentTime for autoscroll and seek detection
       intervalRef.current = window.setInterval(() => {
         if (playerRef.current?.getCurrentTime) {
           const time = playerRef.current.getCurrentTime() * 1000
           const prev = lastTimeRef.current
 
-          // Detect forward/backward seeks (jump > 500ms)
           if (prev > 0 && Math.abs(time - prev) > 500) {
             if (time > prev) {
               onPlayerEvent?.({ type: 'seek', timestamp: time, previousTimestamp: prev })
@@ -107,7 +111,7 @@ function VideoPlayer({ videoId, onTimeUpdate, onPlayerEvent, markers }: Props) {
     }
   }, [videoId])
 
-  return <div id="youtube-player" style={{ width: '100%', aspectRatio: '16/9' }} />
+  return <div id="youtube-player" style={{ width: '100%', aspectRatio: '16/9', minHeight: '50vh', maxHeight: '70vh' }} />
 }
 
 export default VideoPlayer

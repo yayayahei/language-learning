@@ -72,6 +72,8 @@ func main() {
 	handler.NewWeakPointHandler(database).Register(r)
 	handler.NewTrainingHandler(database).Register(r)
 	handler.NewRewatchHandler(database).Register(r)
+	handler.NewPDFHandler(database).Register(r)
+	handler.NewPreciousUsageHandler(database).Register(r)
 
 	// Serve React production build
 	staticDir := os.Getenv("STATIC_DIR")

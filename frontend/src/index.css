@@ -100,11 +100,9 @@ input, select {
 
 /* Layout */
 .player-layout {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 16px;
-  height: calc(100vh - 200px);
-  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .player-side {
@@ -136,6 +134,7 @@ input, select {
   border-radius: var(--radius);
   background: var(--card-bg);
   padding: 8px;
+  max-height: 40vh;
 }
 
 .transcript-panel.empty {
@@ -548,6 +547,211 @@ input, select {
 
 .error { padding: 12px; background: rgba(220, 38, 38, 0.1); color: var(--danger); border-radius: var(--radius); margin-bottom: 12px; }
 .empty { color: var(--text-muted); text-align: center; padding: 32px; }
+
+/* PDF Viewer */
+.pdf-viewer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.pdf-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pdf-controls button {
+  padding: 6px 14px;
+}
+
+.pdf-page-container {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: auto;
+  max-width: 100%;
+  background: #fff;
+}
+
+.pdf-text-layer {
+  opacity: 0.2;
+  --text-div: transparent;
+}
+
+.pdf-text-layer span {
+  color: transparent;
+}
+
+.pdf-text-layer span::selection {
+  background: rgba(79, 70, 229, 0.3);
+}
+
+.pdf-viewer-status {
+  text-align: center;
+  padding: 32px;
+  color: var(--text-muted);
+}
+
+.pdf-viewer-status.error {
+  color: var(--danger);
+}
+
+/* PDF Page */
+.pdf-page h2 {
+  margin-bottom: 16px;
+}
+
+.pdf-reader-page .back-btn {
+  background: var(--border);
+  color: var(--text);
+  margin-bottom: 16px;
+}
+
+.upload-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.upload-error {
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.pdf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pdf-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.pdf-item:hover {
+  border-color: var(--primary);
+}
+
+.pdf-title {
+  font-weight: 500;
+}
+
+.pdf-date {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Selection Menu */
+.selection-menu {
+  position: fixed;
+  background: var(--card-bg);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  z-index: 200;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.selection-text {
+  font-style: italic;
+  color: var(--text);
+  font-size: 13px;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selection-menu button {
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
+.selection-menu select {
+  font-size: 13px;
+}
+
+.selection-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.selection-actions button:last-child {
+  background: var(--border);
+  color: var(--text);
+}
+
+.selection-done {
+  color: var(--success);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Precious Usage Page */
+.pu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+
+.pu-type-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.pu-type-badge.word { background: #dbeafe; color: #1d4ed8; }
+.pu-type-badge.phrase { background: #fef3c7; color: #92400e; }
+.pu-type-badge.expression { background: #fce7f3; color: #9d174d; }
+
+.pu-text {
+  font-weight: 600;
+  min-width: 80px;
+}
+
+.pu-source {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: rgba(79, 70, 229, 0.08);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.pu-date {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
 
 /* Responsive */
 @media (max-width: 768px) {

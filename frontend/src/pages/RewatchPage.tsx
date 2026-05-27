@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import VideoPlayer from '../components/VideoPlayer'
 import TranscriptPanel from '../components/TranscriptPanel'
 import GapReview from '../components/GapReview'
@@ -33,6 +33,8 @@ type PlayerEvent = {
 
 function RewatchPage() {
   const { videoId } = useParams<{ videoId: string }>()
+  const [searchParams] = useSearchParams()
+  const targetTimestamp = searchParams.get('t') ? parseInt(searchParams.get('t')!) : null
   const [segments, setSegments] = useState<Segment[]>([])
   const [weakPoints, setWeakPoints] = useState<WeakPoint[]>([])
   const [currentTime, setCurrentTime] = useState(0)
@@ -41,18 +43,28 @@ function RewatchPage() {
   const [showGapReview, setShowGapReview] = useState(false)
   const [gapGroups, setGapGroups] = useState<InteractionGroup[]>([])
   const [summary, setSummary] = useState<any>(null)
+  const [initialPosition, setInitialPosition] = useState(0)
+  const lastSavedRef = useRef(0)
   const eventsRef = useRef<PlayerEvent[]>([])
   const matchedRef = useRef<Set<number>>(new Set())
+  const [playerReady, setPlayerReady] = useState(false)
   const passedRef = useRef<Set<number>>(new Set())
 
   useEffect(() => {
     if (!videoId) return
 
-    // Load transcript
-    fetch(`/api/transcripts/${videoId}`)
-      .then((r) => r.json())
-      .then((data) => setSegments(data.segments || []))
-      .catch(() => {})
+    // Load transcript + saved position before mounting player
+    Promise.all([
+      fetch(`/api/transcripts/${videoId}`).then((r) => r.json()).catch(() => ({ segments: [] })),
+      fetch(`/api/videos/${videoId}/position`).then((r) => r.json()).catch(() => ({ position_ms: 0 })),
+    ]).then(([transcriptData, posData]) => {
+      setSegments(transcriptData.segments || [])
+      // Use query param timestamp if provided, otherwise saved position
+      const pos = targetTimestamp ?? posData.position_ms ?? 0
+      setInitialPosition(pos)
+      lastSavedRef.current = pos
+      setPlayerReady(true)
+    })
 
     // Load weak points for this video
     fetch(`/api/weak-points?search=&type=`)
@@ -89,6 +101,23 @@ function RewatchPage() {
     [weakPoints]
   )
 
+  // Save playback position periodically
+  useEffect(() => {
+    if (!videoId) return
+    const interval = setInterval(() => {
+      const time = lastTimeRef.current
+      if (time > 0 && Math.abs(time - lastSavedRef.current) > 5000) {
+        lastSavedRef.current = time
+        fetch(`/api/videos/${videoId}/position`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ position_ms: Math.round(time) }),
+        }).catch(() => {})
+      }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [videoId])
+
   const handleWatchComplete = () => {
     // Determine passed (not matched)
     for (const wp of weakPoints) {
@@ -123,20 +152,32 @@ function RewatchPage() {
     }
   }
 
+  const seekRef = useRef<((ms: number) => void) | null>(null)
+  const lastTimeRef = useRef(0)
+
+  const handleTimeUpdate = (time: number) => {
+    lastTimeRef.current = time
+    setCurrentTime(time)
+  }
+
   const markers = weakPoints.map((wp) => wp.timestamp_ms)
 
   return (
     <div className="rewatch-page">
       <h2>Re-watch</h2>
 
-      {videoId && (
+      {videoId && !playerReady && <p className="empty">Loading saved position...</p>}
+      {videoId && playerReady && (
         <div className="player-layout">
           <div className="player-side">
             <VideoPlayer
+              key={`${videoId}-${initialPosition}`}
               videoId={videoId}
-              onTimeUpdate={setCurrentTime}
+              onTimeUpdate={handleTimeUpdate}
               onPlayerEvent={handlePlayerEvent}
               markers={markers}
+              seekRef={seekRef}
+              initialPositionMs={initialPosition}
             />
             <button className="done-watching" onClick={handleWatchComplete}>
               Done Re-watching
@@ -145,6 +186,7 @@ function RewatchPage() {
           <TranscriptPanel
             segments={segments}
             currentTime={currentTime}
+            onSeek={(ms) => seekRef.current?.(ms)}
           />
         </div>
       )}
@@ -206,7 +248,7 @@ function computeGapGroups(events: PlayerEvent[], segments: Segment[]): Interacti
   for (const cluster of clusters) {
     const clusterCenter = cluster.reduce((s, e) => s + e.timestamp, 0) / cluster.length
     const nearby = segments.filter(
-      (s) => s.end_ms >= clusterCenter - 15000 && s.start_ms <= clusterCenter + 5000
+      (s) => s.end_ms >= clusterCenter - 8000 && s.start_ms <= clusterCenter + 4000
     )
     if (nearby.length > 0) {
       groups.push({

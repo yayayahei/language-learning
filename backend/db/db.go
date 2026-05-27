@@ -35,11 +35,16 @@ func (d *DB) InitSchema() error {
 		id VARCHAR(32) PRIMARY KEY,
 		url VARCHAR(2048) NOT NULL,
 		title VARCHAR(512) DEFAULT '',
+			playback_position_ms BIGINT DEFAULT 0,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	)`)
 	if err != nil {
 		return err
 	}
+
+	// Add column if missing on existing databases (ignore error if already exists)
+	d.conn.Exec("ALTER TABLE videos ADD COLUMN playback_position_ms BIGINT DEFAULT 0")
+
 
 	_, err = d.conn.Exec(`
 	CREATE TABLE IF NOT EXISTS transcripts (
@@ -116,16 +121,86 @@ func (d *DB) InitSchema() error {
 		new_weak_points_count INT DEFAULT 0,
 		FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE
 	)`)
-	return err
+	if err != nil {
+		return err
+	}
+
+	_, err = d.conn.Exec(`
+	CREATE TABLE IF NOT EXISTS pdf_documents (
+		id VARCHAR(36) PRIMARY KEY,
+		filename VARCHAR(512) NOT NULL,
+		title VARCHAR(512) DEFAULT '',
+		file_path VARCHAR(1024) NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = d.conn.Exec(`
+	CREATE TABLE IF NOT EXISTS precious_usages (
+		id BIGINT AUTO_INCREMENT PRIMARY KEY,
+		text VARCHAR(1024) NOT NULL,
+		pu_type ENUM('word', 'phrase', 'expression') NOT NULL,
+		source_type ENUM('video', 'pdf') NOT NULL,
+		source_id VARCHAR(36) NOT NULL,
+		sentence TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		INDEX idx_source (source_type, source_id)
+	)`)
+	if err != nil {
+		return err
+	}
+
+	// Migration: allow weak_points from PDF sources (ignore error if already applied)
+	d.conn.Exec("ALTER TABLE weak_points MODIFY video_id VARCHAR(32) NULL")
+	d.conn.Exec("ALTER TABLE weak_points ADD COLUMN source_type ENUM('video', 'pdf') DEFAULT 'video'")
+	d.conn.Exec("ALTER TABLE weak_points ADD COLUMN source_id VARCHAR(36) DEFAULT ''")
+
+	return nil
 }
 
 // Video methods
+func (d *DB) DeleteVideo(id string) error {
+	if d.conn == nil {
+		return ErrDBUnavailable
+	}
+	_, err := d.conn.Exec("DELETE FROM videos WHERE id = ?", id)
+	return err
+}
+
 func (d *DB) UpsertVideo(id, url string) error {
 	_, err := d.conn.Exec(
 		"INSERT INTO videos (id, url) VALUES (?, ?) ON DUPLICATE KEY UPDATE url = VALUES(url)",
 		id, url,
 	)
 	return err
+}
+
+func (d *DB) SavePlaybackPosition(videoID string, positionMs int64) error {
+	if d.conn == nil {
+		return ErrDBUnavailable
+	}
+	_, err := d.conn.Exec(
+		"UPDATE videos SET playback_position_ms = ? WHERE id = ?",
+		positionMs, videoID,
+	)
+	return err
+}
+
+func (d *DB) GetPlaybackPosition(videoID string) (int64, error) {
+	if d.conn == nil {
+		return 0, ErrDBUnavailable
+	}
+	var pos int64
+	err := d.conn.QueryRow(
+		"SELECT COALESCE(playback_position_ms, 0) FROM videos WHERE id = ?",
+		videoID,
+	).Scan(&pos)
+	if err != nil {
+		return 0, nil
+	}
+	return pos, nil
 }
 
 func (d *DB) ListVideos() ([]map[string]interface{}, error) {

@@ -54,8 +54,11 @@ function VideoPage() {
   const [error, setError] = useState('')
   const [showGapReview, setShowGapReview] = useState(false)
   const [gapGroups, setGapGroups] = useState<InteractionGroup[]>([])
+  const [initialPosition, setInitialPosition] = useState(0)
 
+  const seekRef = useRef<((ms: number) => void) | null>(null)
   const eventsRef = useRef<PlayerEvent[]>([])
+  const lastSavedRef = useRef(0)
 
   const handleLoad = async () => {
     if (!url.trim()) return
@@ -63,10 +66,21 @@ function VideoPage() {
     setLoading(true)
     try {
       const data = await fetchTranscript(url)
-      setVideoId(extractVideoId(url))
+      const vid = extractVideoId(url)
+      setVideoId(vid)
       setSegments(data.segments)
       eventsRef.current = []
       setShowGapReview(false)
+
+      // Fetch saved playback position
+      if (vid) {
+        try {
+          const posRes = await fetch(`/api/videos/${vid}/position`)
+          const posData = await posRes.json()
+          setInitialPosition(posData.position_ms || 0)
+          lastSavedRef.current = posData.position_ms || 0
+        } catch {}
+      }
     } catch (e: any) {
       setError(e.message)
     }
@@ -77,8 +91,32 @@ function VideoPage() {
     eventsRef.current.push(event)
   }, [])
 
+  const lastTimeRef = useRef(0)
+
+  const handleTimeUpdate = (time: number) => {
+    lastTimeRef.current = time
+    setCurrentTime(time)
+  }
+
+  // Save playback position every 5 seconds
+  useEffect(() => {
+    if (!videoId) return
+    const interval = setInterval(() => {
+      const t = lastTimeRef.current
+      if (t > 0 && Math.abs(t - lastSavedRef.current) > 5000) {
+        lastSavedRef.current = t
+        fetch(`/api/videos/${videoId}/position`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ position_ms: Math.round(t) }),
+        }).catch(() => {})
+      }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [videoId])
+
   const handleSeek = useCallback((timeMs: number) => {
-    // seek handled by VideoPlayer markers
+    seekRef.current?.(timeMs)
   }, [])
 
   const handleWatchComplete = () => {
@@ -111,8 +149,10 @@ function VideoPage() {
           <div className="player-side">
             <VideoPlayer
               videoId={videoId}
-              onTimeUpdate={setCurrentTime}
+              onTimeUpdate={handleTimeUpdate}
               onPlayerEvent={handlePlayerEvent}
+              seekRef={seekRef}
+              initialPositionMs={initialPosition}
             />
             <button className="done-watching" onClick={handleWatchComplete}>
               Done Watching
@@ -121,6 +161,7 @@ function VideoPage() {
           <TranscriptPanel
             segments={segments}
             currentTime={currentTime}
+            onSeek={handleSeek}
           />
         </div>
       )}
@@ -156,13 +197,13 @@ function computeGapGroups(events: PlayerEvent[], segments: Segment[]): Interacti
 
   const groups: InteractionGroup[] = []
   for (const cluster of clusters) {
-    // For each cluster, find surrounding segments (2 before, 1 after)
+    // Find segments around the cluster (2 before, 1 after the event)
     const clusterCenter = cluster.reduce((s, e) => s + e.timestamp, 0) / cluster.length
     const nearbySegments = segments.filter(
       (s) =>
-        s.end_ms >= clusterCenter - 15000 &&
-        s.start_ms <= clusterCenter + 5000
-    )
+        s.end_ms >= clusterCenter - 8000 &&
+        s.start_ms <= clusterCenter + 4000
+    ).slice(0, 4)
     if (nearbySegments.length > 0) {
       groups.push({
         segments: nearbySegments,

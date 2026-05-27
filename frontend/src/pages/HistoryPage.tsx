@@ -12,11 +12,18 @@ function HistoryPage() {
   const [videos, setVideos] = useState<Video[]>([])
   const navigate = useNavigate()
 
-  useEffect(() => {
+  const fetchVideos = () => {
     fetch('/api/videos')
       .then((r) => r.json())
       .then((data) => setVideos(data.videos || []))
-  }, [])
+  }
+
+  useEffect(() => { fetchVideos() }, [])
+
+  const handleDelete = async (id: string) => {
+    await fetch(`/api/videos/${id}`, { method: 'DELETE' })
+    fetchVideos()
+  }
 
   return (
     <div className="history-page">
@@ -31,9 +38,14 @@ function HistoryPage() {
               </a>
               <span className="date">{v.created_at}</span>
             </div>
-            <button onClick={() => navigate(`/rewatch/${v.id}`)}>
-              Re-watch
-            </button>
+            <div className="video-actions">
+              <button onClick={() => navigate(`/rewatch/${v.id}`)}>
+                Re-watch
+              </button>
+              <button className="danger" onClick={() => handleDelete(v.id)}>
+                Delete
+              </button>
+            </div>
           </div>
         ))}
         {videos.length === 0 && <p className="empty">No videos watched yet</p>}

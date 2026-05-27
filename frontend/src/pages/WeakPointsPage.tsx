@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 type WeakPoint = {
   id: number
@@ -13,6 +14,7 @@ type WeakPoint = {
 }
 
 function WeakPointsPage() {
+  const navigate = useNavigate()
   const [points, setPoints] = useState<WeakPoint[]>([])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('')
@@ -60,6 +62,17 @@ function WeakPointsPage() {
     return 'I'
   }
 
+  const formatTs = (ms: number) => {
+    const totalSec = Math.floor(ms / 1000)
+    const min = Math.floor(totalSec / 60)
+    const sec = totalSec % 60
+    return `${min}:${sec.toString().padStart(2, '0')}`
+  }
+
+  const handleReplay = (wp: WeakPoint) => {
+    navigate(`/rewatch/${wp.video_id}?t=${wp.timestamp_ms}`)
+  }
+
   return (
     <div className="weak-points-page">
       <h2>Weak Points</h2>
@@ -97,9 +110,13 @@ function WeakPointsPage() {
             <span className={`wp-type-badge ${wp.wp_type}`}>{typeLabel(wp.wp_type)}</span>
             <span className="wp-text">{wp.text}</span>
             <span className="wp-context">...{wp.sentence}...</span>
+            <span className="wp-time">@{formatTs(wp.timestamp_ms)}</span>
             <span className="wp-status">
               {wp.grasped ? 'Grasped' : wp.in_training ? 'Training' : 'New'}
             </span>
+            <button className="replay-btn" onClick={() => handleReplay(wp)} title="Replay in video">
+              &#9654;
+            </button>
             <button className="delete-btn" onClick={() => handleDelete(wp.id)}>
               x
             </button>
