@@ -1,0 +1,29 @@
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
+
+# Other tools
+.codex/
+.trae/
+
+# Go
+backend/tmp/
+*.exe
+*.test
+
+# Node
+node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
