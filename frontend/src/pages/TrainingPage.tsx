@@ -1,13 +1,121 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 type Card = {
   id: number
   text: string
   wp_type: string
   sentence: string
+  video_id: string
+  timestamp_ms: number
   easiness_factor: number
   interval: number
   repetitions: number
+}
+
+function VideoContext({ videoId, timestampMs }: { videoId: string; timestampMs: number }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [show, setShow] = useState(false)
+  const playerId = `player-${videoId}-${timestampMs}`
+
+  // Lazy-load: only create IFrame when visible or user clicks
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShow(true)
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.1 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  const startSeconds = Math.floor(timestampMs / 1000)
+
+  return (
+    <div className="video-context" ref={containerRef}>
+      {!show ? (
+        <button className="replay-btn" onClick={() => setShow(true)}>
+          Play context
+        </button>
+      ) : (
+        <div className="mini-player">
+          <div id={playerId} style={{ width: '100%', height: 120 }} />
+        </div>
+      )}
+
+      {/* Hidden YouTube IFrame API loader — only when visible */}
+      {show && (
+        <YouTubeLoader
+          videoId={videoId}
+          playerId={playerId}
+          startSeconds={startSeconds}
+        />
+      )}
+    </div>
+  )
+}
+
+function YouTubeLoader({
+  videoId,
+  playerId,
+  startSeconds,
+}: {
+  videoId: string
+  playerId: string
+  startSeconds: number
+}) {
+  const loadedRef = useRef(false)
+
+  useEffect(() => {
+    if (loadedRef.current) return
+    loadedRef.current = true
+
+    if (!window.YT) {
+      const tag = document.createElement('script')
+      tag.src = 'https://www.youtube.com/iframe_api'
+      document.body.appendChild(tag)
+
+      const orig = window.onYouTubeIframeAPIReady
+      window.onYouTubeIframeAPIReady = () => {
+        orig?.()
+        createPlayer()
+      }
+    } else {
+      createPlayer()
+    }
+
+    function createPlayer() {
+      new window.YT.Player(playerId, {
+        videoId,
+        playerVars: {
+          start: startSeconds,
+          controls: 1,
+          modestbranding: 1,
+          rel: 0,
+        },
+      })
+    }
+
+    return () => {
+      loadedRef.current = false
+    }
+  }, [videoId, playerId, startSeconds])
+
+  return null
+}
+
+// Global YT type
+declare global {
+  interface Window {
+    onYouTubeIframeAPIReady: (() => void) | null
+    YT: any
+  }
 }
 
 function TrainingPage() {
@@ -16,7 +124,7 @@ function TrainingPage() {
   const [index, setIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
   const [finished, setFinished] = useState(false)
-  const [results, setResults] = useState<{ correct: number; total: number }>({ correct: 0, total: 0 })
+  const [results, setResults] = useState({ correct: 0, total: 0 })
   const [quizOptions, setQuizOptions] = useState<string[]>([])
   const [quizCorrect, setQuizCorrect] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
@@ -36,17 +144,14 @@ function TrainingPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: cardId, correct, quality }),
     })
-
-    const newResults = {
-      correct: results.correct + (correct ? 1 : 0),
-      total: results.total + 1,
-    }
-    setResults(newResults)
+    setResults((r) => ({
+      correct: r.correct + (correct ? 1 : 0),
+      total: r.total + 1,
+    }))
   }
 
   const handleFlashcard = async (correct: boolean) => {
-    const card = cards[index]
-    await submitReview(card.id, correct, correct ? 4 : 1)
+    await submitReview(cards[index].id, correct, correct ? 4 : 1)
     nextCard()
   }
 
@@ -62,18 +167,12 @@ function TrainingPage() {
 
   const handleQuizStart = () => {
     const card = cards[index]
-    const sentence = card.sentence.replace(card.text, '___')
-    // Generate distractors from other cards
     const distractors = cards
       .filter((c) => c.id !== card.id && c.wp_type === card.wp_type)
       .slice(0, 3)
       .map((c) => c.text)
-
-    // Pad with "???" if not enough distractors
     while (distractors.length < 3) distractors.push('???')
-
-    const options = [card.text, ...distractors].sort(() => Math.random() - 0.5)
-    setQuizOptions(options)
+    setQuizOptions([card.text, ...distractors].sort(() => Math.random() - 0.5))
   }
 
   const handleQuizAnswer = async (answer: string) => {
@@ -84,7 +183,14 @@ function TrainingPage() {
   }
 
   if (loading) return <div className="training-page">Loading...</div>
-  if (cards.length === 0) return <div className="training-page"><h2>Training</h2><p>No cards due for review.</p></div>
+  if (cards.length === 0)
+    return (
+      <div className="training-page">
+        <h2>Training</h2>
+        <p>No cards due for review.</p>
+      </div>
+    )
+
   if (finished) {
     return (
       <div className="training-page">
@@ -114,13 +220,16 @@ function TrainingPage() {
         </button>
       </div>
 
-      <div className="progress">
-        {index + 1} / {cards.length}
-      </div>
+      <div className="progress">{index + 1} / {cards.length}</div>
+
+      {/* Video context for current card */}
+      {card.video_id && (
+        <VideoContext videoId={card.video_id} timestampMs={card.timestamp_ms} />
+      )}
 
       {mode === 'flashcard' && (
         <div className="flashcard">
-          <div className={`card ${flipped ? 'flipped' : ''}`} onClick={() => setFlipped(true)}>
+          <div className={`card ${flipped ? 'flipped' : ''}`} onClick={() => !flipped && setFlipped(true)}>
             <div className="front">
               <span className={`type-badge ${card.wp_type}`}>{card.wp_type}</span>
               <strong>{card.text}</strong>
@@ -150,9 +259,7 @@ function TrainingPage() {
               <p className="quiz-sentence">{card.sentence.replace(card.text, '___')}</p>
               <div className="quiz-options">
                 {quizOptions.map((opt, i) => (
-                  <button key={i} onClick={() => handleQuizAnswer(opt)}>
-                    {opt}
-                  </button>
+                  <button key={i} onClick={() => handleQuizAnswer(opt)}>{opt}</button>
                 ))}
               </div>
             </div>

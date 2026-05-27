@@ -38,8 +38,8 @@ func (h *WeakPointHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Text == "" || req.WPType == "" || req.VideoID == "" {
-		writeError(w, http.StatusBadRequest, "text, wp_type, and video_id are required")
+	if req.Text == "" || req.WPType == "" || req.VideoID == "" || req.Sentence == "" {
+		writeError(w, http.StatusBadRequest, "text, wp_type, video_id, and sentence are required")
 		return
 	}
 

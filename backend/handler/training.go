@@ -24,18 +24,21 @@ func (h *TrainingHandler) Register(r chi.Router) {
 }
 
 type dueCard struct {
-	ID           int64  `json:"id"`
-	Text         string `json:"text"`
-	WPType       string `json:"wp_type"`
-	Sentence     string `json:"sentence"`
-	Easiness     float64 `json:"easiness_factor"`
-	Interval     int    `json:"interval"`
-	Repetitions  int    `json:"repetitions"`
+	ID          int64   `json:"id"`
+	Text        string  `json:"text"`
+	WPType      string  `json:"wp_type"`
+	Sentence    string  `json:"sentence"`
+	VideoID     string  `json:"video_id"`
+	TimestampMs int64   `json:"timestamp_ms"`
+	Easiness    float64 `json:"easiness_factor"`
+	Interval    int     `json:"interval"`
+	Repetitions int     `json:"repetitions"`
 }
 
 func (h *TrainingHandler) getDue(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Conn().Query(`
 		SELECT wp.id, wp.text, wp.wp_type, wp.sentence,
+			       wp.video_id, wp.timestamp_ms,
 			   COALESCE(ts.easiness_factor, 2.5),
 			   COALESCE(ts.interval, 0),
 			   COALESCE(ts.repetitions, 0)
@@ -55,7 +58,7 @@ func (h *TrainingHandler) getDue(w http.ResponseWriter, r *http.Request) {
 	var cards []dueCard
 	for rows.Next() {
 		var c dueCard
-		if err := rows.Scan(&c.ID, &c.Text, &c.WPType, &c.Sentence, &c.Easiness, &c.Interval, &c.Repetitions); err != nil {
+		if err := rows.Scan(&c.ID, &c.Text, &c.WPType, &c.Sentence, &c.VideoID, &c.TimestampMs, &c.Easiness, &c.Interval, &c.Repetitions); err != nil {
 			continue
 		}
 		cards = append(cards, c)

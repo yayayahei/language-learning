@@ -24,20 +24,30 @@ func main() {
 
 	conn, err := sql.Open("mysql", dsn)
 	if err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
+		log.Printf("WARNING: failed to open database: %v (running without DB)", err)
+		conn = nil
 	}
-	defer conn.Close()
 
-	if err := conn.Ping(); err != nil {
-		log.Fatalf("failed to ping database: %v", err)
+	if conn != nil {
+		if err := conn.Ping(); err != nil {
+			log.Printf("WARNING: failed to ping database: %v (running without DB)", err)
+			conn.Close()
+			conn = nil
+		}
 	}
-	fmt.Println("connected to MySQL")
+	if conn != nil {
+		fmt.Println("connected to MySQL")
+	} else {
+		fmt.Println("running without MySQL — API endpoints will return 503")
+	}
 
 	database := db.New(conn)
-	if err := database.InitSchema(); err != nil {
-		log.Fatalf("failed to init schema: %v", err)
+	if conn != nil {
+		if err := database.InitSchema(); err != nil {
+			log.Fatalf("failed to init schema: %v", err)
+		}
+		fmt.Println("schema initialized")
 	}
-	fmt.Println("schema initialized")
 
 	fetcher := transcript.NewFetcher()
 
@@ -45,10 +55,15 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware)
+	r.Use(dbGuardMiddleware(database))
 
 	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"ok"}`))
+		if conn != nil {
+			w.Write([]byte(`{"status":"ok","db":"connected"}`))
+		} else {
+			w.Write([]byte(`{"status":"ok","db":"disconnected"}`))
+		}
 	})
 
 	handler.NewTranscriptHandler(database, fetcher).Register(r)
@@ -77,7 +92,6 @@ func serveStatic(r chi.Router, staticDir string) {
 	fs := http.FileServer(http.Dir(staticDir))
 
 	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
-		// Skip API routes (should be handled by chi before this)
 		if len(r.URL.Path) >= 4 && r.URL.Path[:4] == "/api" {
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -91,9 +105,22 @@ func serveStatic(r chi.Router, staticDir string) {
 			return
 		}
 
-		// SPA fallback: serve index.html for non-file routes
 		http.ServeFile(w, r, staticDir+"/index.html")
 	})
+}
+
+func dbGuardMiddleware(d *db.DB) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !d.Ready() && r.URL.Path != "/api/health" && len(r.URL.Path) >= 5 && r.URL.Path[:5] == "/api/" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				w.Write([]byte(`{"error":"database unavailable"}`))
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

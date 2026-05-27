@@ -3,9 +3,12 @@ package db
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 
 	"github.com/yayayahei/language-learning/backend/transcript"
 )
+
+var ErrDBUnavailable = errors.New("database unavailable")
 
 type DB struct {
 	conn *sql.DB
@@ -19,7 +22,14 @@ func (d *DB) Conn() *sql.DB {
 	return d.conn
 }
 
+func (d *DB) Ready() bool {
+	return d.conn != nil
+}
+
 func (d *DB) InitSchema() error {
+	if d.conn == nil {
+		return ErrDBUnavailable
+	}
 	_, err := d.conn.Exec(`
 	CREATE TABLE IF NOT EXISTS videos (
 		id VARCHAR(32) PRIMARY KEY,
