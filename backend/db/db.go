@@ -174,6 +174,9 @@ func (d *DB) DeleteVideo(id string) error {
 }
 
 func (d *DB) UpsertVideo(id, url string) error {
+	if d.conn == nil {
+		return ErrDBUnavailable
+	}
 	_, err := d.conn.Exec(
 		"INSERT INTO videos (id, url) VALUES (?, ?) ON DUPLICATE KEY UPDATE url = VALUES(url)",
 		id, url,
@@ -208,6 +211,9 @@ func (d *DB) GetPlaybackPosition(videoID string) (int64, error) {
 }
 
 func (d *DB) ListVideos() ([]map[string]interface{}, error) {
+	if d.conn == nil {
+		return nil, ErrDBUnavailable
+	}
 	rows, err := d.conn.Query("SELECT id, url, title, created_at FROM videos ORDER BY created_at DESC")
 	if err != nil {
 		return nil, err
@@ -253,6 +259,9 @@ func (d *DB) GetPDFPosition(pdfID string) (int, error) {
 
 // Transcript methods
 func (d *DB) SaveTranscript(videoID, language string, segments []transcript.Segment) error {
+	if d.conn == nil {
+		return ErrDBUnavailable
+	}
 	segmentsJSON, err := json.Marshal(segments)
 	if err != nil {
 		return err
@@ -265,6 +274,9 @@ func (d *DB) SaveTranscript(videoID, language string, segments []transcript.Segm
 }
 
 func (d *DB) GetTranscript(videoID string) (string, []transcript.Segment, error) {
+	if d.conn == nil {
+		return "", nil, ErrDBUnavailable
+	}
 	var language string
 	var segmentsJSON string
 	err := d.conn.QueryRow(

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import VideoPlayer from '../components/VideoPlayer'
 import TranscriptPanel from '../components/TranscriptPanel'
 import GapReview from '../components/GapReview'

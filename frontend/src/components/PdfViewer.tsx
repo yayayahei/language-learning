@@ -170,16 +170,29 @@ function PdfViewer({ url, initialPage, onSelection, onPageChange }: PdfViewerPro
     }
   }, [pdf, renderAllPages])
 
-  // Scroll to initial page after rendering
+  // Scroll to initial page after pages are rendered
+  const scrollToPage = useCallback((pageNum: number) => {
+    if (pageNum <= 1) return
+    const attemptScroll = (retries: number) => {
+      const el = containerRef.current?.querySelector(`[data-page-num="${pageNum}"]`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'instant', block: 'start' })
+        return
+      }
+      if (retries > 0) {
+        requestAnimationFrame(() => attemptScroll(retries - 1))
+      }
+    }
+    // Retry up to 50 frames (~1 second) until the target page is in the DOM
+    attemptScroll(50)
+  }, [])
+
   useEffect(() => {
     if (!loading && initialPage && initialPage > 1 && !hasScrolledRef.current) {
       hasScrolledRef.current = true
-      const el = containerRef.current?.querySelector(`[data-page-num="${initialPage}"]`)
-      if (el) {
-        el.scrollIntoView({ behavior: 'instant', block: 'start' })
-      }
+      scrollToPage(initialPage)
     }
-  }, [loading, initialPage])
+  }, [loading, initialPage, scrollToPage])
 
   // Handle text selection across all pages
   const handlePointerUp = (e: React.PointerEvent) => {

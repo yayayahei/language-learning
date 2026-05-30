@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS videos (
     id VARCHAR(32) PRIMARY KEY,
     url VARCHAR(2048) NOT NULL,
     title VARCHAR(512) DEFAULT '',
+    playback_position_ms BIGINT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -32,13 +33,15 @@ CREATE TABLE IF NOT EXISTS weak_points (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     text VARCHAR(1024) NOT NULL,
     wp_type ENUM('word', 'phrase', 'idiom') NOT NULL,
-    video_id VARCHAR(32) NOT NULL,
+    video_id VARCHAR(32) NULL,
     sentence TEXT NOT NULL,
     timestamp_ms BIGINT NOT NULL,
     in_training BOOLEAN DEFAULT FALSE,
     grasped BOOLEAN DEFAULT FALSE,
+    source_type ENUM('video', 'pdf') DEFAULT 'video',
+    source_id VARCHAR(36) DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE,
+    FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE SET NULL,
     INDEX idx_video_id (video_id),
     INDEX idx_in_training (in_training),
     INDEX idx_grasped (grasped)
@@ -65,4 +68,24 @@ CREATE TABLE IF NOT EXISTS rewatch_sessions (
     struggled_count INT DEFAULT 0,
     new_weak_points_count INT DEFAULT 0,
     FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS pdf_documents (
+    id VARCHAR(36) PRIMARY KEY,
+    filename VARCHAR(512) NOT NULL,
+    title VARCHAR(512) DEFAULT '',
+    file_path VARCHAR(1024) NOT NULL,
+    last_page INT DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS precious_usages (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    text VARCHAR(1024) NOT NULL,
+    pu_type ENUM('word', 'phrase', 'expression') NOT NULL,
+    source_type ENUM('video', 'pdf') NOT NULL,
+    source_id VARCHAR(36) NOT NULL,
+    sentence TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_source (source_type, source_id)
 );

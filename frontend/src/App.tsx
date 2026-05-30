@@ -11,12 +11,14 @@ function App() {
   return (
     <div className="app">
       <nav>
-        <Link to="/">Watch</Link>
+        <span className="nav-group">
+          <Link to="/">Watch</Link>
+          <Link to="/history" title="Watch History" className="icon-link">&#128337;</Link>
+        </span>
         <Link to="/pdf">PDF</Link>
         <Link to="/weak-points">Weak Points</Link>
         <Link to="/precious-usages">Precious Usage</Link>
         <Link to="/training">Training</Link>
-        <Link to="/history">History</Link>
       </nav>
       <main>
         <Routes>
