@@ -34,6 +34,8 @@ type dueCard struct {
 	Easiness    float64 `json:"easiness_factor"`
 	Interval    int     `json:"interval"`
 	Repetitions int     `json:"repetitions"`
+	SourceType  string  `json:"source_type"`
+	SourceID    string  `json:"source_id"`
 }
 
 func (h *TrainingHandler) getDue(w http.ResponseWriter, r *http.Request) {
@@ -43,7 +45,9 @@ func (h *TrainingHandler) getDue(w http.ResponseWriter, r *http.Request) {
 		       wp.video_id, wp.timestamp_ms,
 		       COALESCE(ts.easiness_factor, 2.5),
 		       COALESCE(ts.interval, 0),
-		       COALESCE(ts.repetitions, 0)
+		       COALESCE(ts.repetitions, 0),
+		       COALESCE(wp.source_type, 'video'),
+		       COALESCE(wp.source_id, '')
 		FROM weak_points wp
 		JOIN training_state ts ON ts.weak_point_id = wp.id
 		WHERE wp.in_training = TRUE
@@ -61,7 +65,7 @@ func (h *TrainingHandler) getDue(w http.ResponseWriter, r *http.Request) {
 	var cards []dueCard
 	for rows.Next() {
 		var c dueCard
-		if err := rows.Scan(&c.ID, &c.Text, &c.WPType, &c.Sentence, &c.VideoID, &c.TimestampMs, &c.Easiness, &c.Interval, &c.Repetitions); err != nil {
+		if err := rows.Scan(&c.ID, &c.Text, &c.WPType, &c.Sentence, &c.VideoID, &c.TimestampMs, &c.Easiness, &c.Interval, &c.Repetitions, &c.SourceType, &c.SourceID); err != nil {
 			continue
 		}
 		cards = append(cards, c)

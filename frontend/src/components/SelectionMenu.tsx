@@ -45,7 +45,6 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
         body: JSON.stringify({
           text,
           wp_type: wpType,
-          video_id: pdfId,
           sentence: text,
           timestamp_ms: pageNum,
           source_type: 'pdf',

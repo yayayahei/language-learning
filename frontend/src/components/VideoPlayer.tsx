@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 
 declare global {
   interface Window {
-    onYouTubeIframeAPIReady: () => void
+    onYouTubeIframeAPIReady?: () => void
     YT: any
   }
 }
@@ -22,7 +22,7 @@ type Props = {
   initialPositionMs?: number
 }
 
-function VideoPlayer({ videoId, onTimeUpdate, onPlayerEvent, markers, seekRef, initialPositionMs }: Props) {
+function VideoPlayer({ videoId, onTimeUpdate, onPlayerEvent, seekRef, initialPositionMs }: Props) {
   const playerRef = useRef<any>(null)
   const intervalRef = useRef<number>(0)
   const lastTimeRef = useRef(0)

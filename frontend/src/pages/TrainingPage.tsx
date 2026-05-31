@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 type Card = {
   id: number
@@ -10,6 +10,8 @@ type Card = {
   easiness_factor: number
   interval: number
   repetitions: number
+  source_type: string
+  source_id: string
 }
 
 function VideoContext({ videoId, timestampMs }: { videoId: string; timestampMs: number }) {
@@ -113,7 +115,7 @@ function YouTubeLoader({
 // Global YT type
 declare global {
   interface Window {
-    onYouTubeIframeAPIReady: (() => void) | null
+    onYouTubeIframeAPIReady?: () => void
     YT: any
   }
 }
@@ -222,10 +224,16 @@ function TrainingPage() {
 
       <div className="progress">{index + 1} / {cards.length}</div>
 
-      {/* Video context for current card */}
-      {card.video_id && (
+      {/* Context viewer: video embed or PDF re-read link */}
+      {card.source_type === 'pdf' && card.source_id ? (
+        <div className="pdf-context">
+          <a href={`/pdf/${card.source_id}?page=${card.timestamp_ms}`} className="reread-link">
+            Re-read (page {card.timestamp_ms})
+          </a>
+        </div>
+      ) : card.video_id ? (
         <VideoContext videoId={card.video_id} timestampMs={card.timestamp_ms} />
-      )}
+      ) : null}
 
       {mode === 'flashcard' && (
         <div className="flashcard">

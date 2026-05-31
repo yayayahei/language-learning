@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import PdfViewer from '../components/PdfViewer'
 import SelectionMenu from '../components/SelectionMenu'
 
@@ -38,19 +38,26 @@ function PdfPage() {
     fetchPdfs()
   }, [])
 
-  // Fetch saved position when entering a PDF
+  const [searchParams] = useSearchParams()
+  const pageParam = searchParams.get('page')
+
+  // Fetch saved position or use query param
   useEffect(() => {
     if (pdfId) {
-      fetch(`/api/pdfs/${pdfId}/position`)
-        .then((r) => r.json())
-        .then((data) => {
-          setInitialPage(data.last_page || 1)
-        })
-        .catch(() => setInitialPage(1))
+      if (pageParam) {
+        setInitialPage(parseInt(pageParam, 10) || 1)
+      } else {
+        fetch(`/api/pdfs/${pdfId}/position`)
+          .then((r) => r.json())
+          .then((data) => {
+            setInitialPage(data.last_page || 1)
+          })
+          .catch(() => setInitialPage(1))
+      }
     } else {
       setInitialPage(undefined)
     }
-  }, [pdfId])
+  }, [pdfId, pageParam])
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()

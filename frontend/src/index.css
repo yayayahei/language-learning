@@ -517,6 +517,25 @@ input, select {
   justify-content: center;
 }
 
+.pdf-context {
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.reread-link {
+  display: inline-block;
+  padding: 8px 16px;
+  background: rgba(79, 70, 229, 0.1);
+  color: var(--primary, #4f46e5);
+  border: 1px solid var(--primary, #4f46e5);
+  border-radius: var(--radius, 8px);
+  text-decoration: none;
+  font-size: 14px;
+}
+.reread-link:hover {
+  background: rgba(79, 70, 229, 0.2);
+}
+
 .mini-player {
   width: 100%;
   max-width: 400px;

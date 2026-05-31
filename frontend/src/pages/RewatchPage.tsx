@@ -38,7 +38,7 @@ function RewatchPage() {
   const [segments, setSegments] = useState<Segment[]>([])
   const [weakPoints, setWeakPoints] = useState<WeakPoint[]>([])
   const [currentTime, setCurrentTime] = useState(0)
-  const [sessionId, setSessionId] = useState<number | null>(null)
+  const [_sessionId, setSessionId] = useState<number | null>(null)
   const [showSummary, setShowSummary] = useState(false)
   const [showGapReview, setShowGapReview] = useState(false)
   const [gapGroups, setGapGroups] = useState<InteractionGroup[]>([])

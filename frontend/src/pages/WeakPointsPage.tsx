@@ -11,6 +11,8 @@ type WeakPoint = {
   in_training: boolean
   grasped: boolean
   created_at: string
+  source_type: string
+  source_id: string
 }
 
 function WeakPointsPage() {
@@ -73,7 +75,11 @@ function WeakPointsPage() {
   }
 
   const handleReplay = (wp: WeakPoint) => {
-    navigate(`/rewatch/${wp.video_id}?t=${wp.timestamp_ms}`)
+    if (wp.source_type === 'pdf' && wp.source_id) {
+      navigate(`/pdf/${wp.source_id}?page=${wp.timestamp_ms}`)
+    } else if (wp.video_id) {
+      navigate(`/rewatch/${wp.video_id}?t=${wp.timestamp_ms}`)
+    }
   }
 
   return (
@@ -117,8 +123,12 @@ function WeakPointsPage() {
             <span className="wp-status">
               {wp.grasped ? 'Grasped' : wp.in_training ? 'Training' : 'New'}
             </span>
-            <button className="replay-btn" onClick={() => handleReplay(wp)} title="Replay in video">
-              &#9654;
+            <button
+              className="replay-btn"
+              onClick={() => handleReplay(wp)}
+              title={wp.source_type === 'pdf' ? 'Re-read in PDF' : 'Replay in video'}
+            >
+              {wp.source_type === 'pdf' ? '📄' : '\u25B6'}
             </button>
             <button className="delete-btn" onClick={() => handleDelete(wp.id)}>
               x
