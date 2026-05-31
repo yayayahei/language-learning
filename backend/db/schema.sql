@@ -1,11 +1,19 @@
 CREATE DATABASE IF NOT EXISTS language_learning;
 USE language_learning;
 
+CREATE TABLE IF NOT EXISTS users (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS videos (
-    id VARCHAR(32) PRIMARY KEY,
+    id VARCHAR(36) PRIMARY KEY,
     url VARCHAR(2048) NOT NULL,
     title VARCHAR(512) DEFAULT '',
     playback_position_ms BIGINT DEFAULT 0,
+    user_id BIGINT NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -24,6 +32,7 @@ CREATE TABLE IF NOT EXISTS interactions (
     video_id VARCHAR(32) NOT NULL,
     event_type ENUM('pause', 'rewind', 'forward') NOT NULL,
     timestamp_ms BIGINT NOT NULL,
+    user_id BIGINT NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE,
     INDEX idx_video_id (video_id)
@@ -33,13 +42,14 @@ CREATE TABLE IF NOT EXISTS weak_points (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     text VARCHAR(1024) NOT NULL,
     wp_type ENUM('word', 'phrase', 'idiom') NOT NULL,
-    video_id VARCHAR(32) NULL,
+    video_id VARCHAR(36) NULL,
     sentence TEXT NOT NULL,
     timestamp_ms BIGINT NOT NULL,
     in_training BOOLEAN DEFAULT FALSE,
     grasped BOOLEAN DEFAULT FALSE,
     source_type ENUM('video', 'pdf') DEFAULT 'video',
     source_id VARCHAR(36) DEFAULT '',
+    user_id BIGINT NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE SET NULL,
     INDEX idx_video_id (video_id),
@@ -67,6 +77,7 @@ CREATE TABLE IF NOT EXISTS rewatch_sessions (
     passed_count INT DEFAULT 0,
     struggled_count INT DEFAULT 0,
     new_weak_points_count INT DEFAULT 0,
+    user_id BIGINT NOT NULL DEFAULT 1,
     FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE
 );
 
@@ -76,6 +87,7 @@ CREATE TABLE IF NOT EXISTS pdf_documents (
     title VARCHAR(512) DEFAULT '',
     file_path VARCHAR(1024) NOT NULL,
     last_page INT DEFAULT 1,
+    user_id BIGINT NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -86,6 +98,7 @@ CREATE TABLE IF NOT EXISTS precious_usages (
     source_type ENUM('video', 'pdf') NOT NULL,
     source_id VARCHAR(36) NOT NULL,
     sentence TEXT,
+    user_id BIGINT NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_source (source_type, source_id)
 );

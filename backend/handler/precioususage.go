@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/yayayahei/language-learning/backend/auth"
 	"github.com/yayayahei/language-learning/backend/db"
 )
 
@@ -24,6 +25,7 @@ func (h *PreciousUsageHandler) Register(r chi.Router) {
 }
 
 func (h *PreciousUsageHandler) create(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.GetUserID(r)
 	var req struct {
 		Text       string `json:"text"`
 		PUType     string `json:"pu_type"`
@@ -42,8 +44,8 @@ func (h *PreciousUsageHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.db.Conn().Exec(
-		"INSERT INTO precious_usages (text, pu_type, source_type, source_id, sentence) VALUES (?, ?, ?, ?, ?)",
-		req.Text, req.PUType, req.SourceType, req.SourceID, req.Sentence,
+		"INSERT INTO precious_usages (text, pu_type, source_type, source_id, sentence, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+		req.Text, req.PUType, req.SourceType, req.SourceID, req.Sentence, userID,
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create precious usage")
@@ -55,11 +57,13 @@ func (h *PreciousUsageHandler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PreciousUsageHandler) list(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.GetUserID(r)
 	search := r.URL.Query().Get("search")
 	puType := r.URL.Query().Get("type")
 
-	query := "SELECT id, text, pu_type, source_type, source_id, sentence, created_at FROM precious_usages WHERE 1=1"
+	query := "SELECT id, text, pu_type, source_type, source_id, sentence, created_at FROM precious_usages WHERE user_id = ?"
 	var args []interface{}
+	args = append(args, userID)
 
 	if search != "" {
 		query += " AND text LIKE ?"
@@ -101,6 +105,7 @@ func (h *PreciousUsageHandler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PreciousUsageHandler) delete(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.GetUserID(r)
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -108,7 +113,7 @@ func (h *PreciousUsageHandler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.db.Conn().Exec("DELETE FROM precious_usages WHERE id = ?", id)
+	_, err = h.db.Conn().Exec("DELETE FROM precious_usages WHERE id = ? AND user_id = ?", id, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete")
 		return

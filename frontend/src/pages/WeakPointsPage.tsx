@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 type WeakPoint = {
   id: number
@@ -18,6 +18,7 @@ function WeakPointsPage() {
   const [points, setPoints] = useState<WeakPoint[]>([])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('')
+  const [searchParams] = useSearchParams()
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [message, setMessage] = useState('')
 
@@ -25,6 +26,8 @@ function WeakPointsPage() {
     const params = new URLSearchParams()
     if (search) params.set('search', search)
     if (filter) params.set('type', filter)
+    const vidFromUrl = searchParams.get('video_id')
+    if (vidFromUrl) params.set('video_id', vidFromUrl)
 
     fetch(`/api/weak-points?${params}`)
       .then((r) => r.json())

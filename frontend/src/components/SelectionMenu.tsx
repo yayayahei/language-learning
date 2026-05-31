@@ -39,19 +39,27 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
   const handleSaveWeakPoint = async () => {
     setSaving(true)
     try {
-      await fetch('/api/weak-points', {
+      const res = await fetch('/api/weak-points', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text,
           wp_type: wpType,
-          video_id: '',
-          sentence: '',
+          video_id: pdfId,
+          sentence: text,
           timestamp_ms: pageNum,
+          source_type: 'pdf',
+          source_id: pdfId,
         }),
       })
-      setDone(true)
+      if (res.ok) {
+        setDone(true)
+      } else {
+        alert('Failed to save weak point')
+        setSaving(false)
+      }
     } catch {
+      alert('Network error')
       setSaving(false)
     }
   }
@@ -59,7 +67,7 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
   const handleSavePreciousUsage = async () => {
     setSaving(true)
     try {
-      await fetch('/api/precious-usages', {
+      const res = await fetch('/api/precious-usages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -70,8 +78,14 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
           sentence: '',
         }),
       })
-      setDone(true)
+      if (res.ok) {
+        setDone(true)
+      } else {
+        alert('Failed to save precious usage')
+        setSaving(false)
+      }
     } catch {
+      alert('Network error')
       setSaving(false)
     }
   }
@@ -101,11 +115,11 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
     return (
       <div className="selection-menu" style={{ left: x, top: y }} ref={menuRef}>
         <div className="selection-text">Add to Weak Points</div>
-        <select value={wpType} onChange={(e) => setWpType(e.target.value)}>
-          <option value="word">Word</option>
-          <option value="phrase">Phrase</option>
-          <option value="idiom">Idiom</option>
-        </select>
+        <div className="popup-type">
+          <label><input type="radio" name="wp-type" value="word" checked={wpType === 'word'} onChange={() => setWpType('word')} /> Word</label>
+          <label><input type="radio" name="wp-type" value="phrase" checked={wpType === 'phrase'} onChange={() => setWpType('phrase')} /> Phrase</label>
+          <label><input type="radio" name="wp-type" value="idiom" checked={wpType === 'idiom'} onChange={() => setWpType('idiom')} /> Idiom</label>
+        </div>
         <div className="selection-actions">
           <button onClick={handleSaveWeakPoint} disabled={saving}>
             {saving ? 'Saving...' : 'Save'}
@@ -119,11 +133,11 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
   return (
     <div className="selection-menu" style={{ left: x, top: y }} ref={menuRef}>
       <div className="selection-text">Save to Precious Usage</div>
-      <select value={puType} onChange={(e) => setPuType(e.target.value)}>
-        <option value="word">Word</option>
-        <option value="phrase">Phrase</option>
-        <option value="expression">Expression</option>
-      </select>
+      <div className="popup-type">
+        <label><input type="radio" name="pu-type" value="word" checked={puType === 'word'} onChange={() => setPuType('word')} /> Word</label>
+        <label><input type="radio" name="pu-type" value="phrase" checked={puType === 'phrase'} onChange={() => setPuType('phrase')} /> Phrase</label>
+        <label><input type="radio" name="pu-type" value="expression" checked={puType === 'expression'} onChange={() => setPuType('expression')} /> Expression</label>
+      </div>
       <div className="selection-actions">
         <button onClick={handleSavePreciousUsage} disabled={saving}>
           {saving ? 'Saving...' : 'Save'}

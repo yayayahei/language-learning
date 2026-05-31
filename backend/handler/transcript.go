@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/yayayahei/language-learning/backend/auth"
 	"github.com/yayayahei/language-learning/backend/db"
 	"github.com/yayayahei/language-learning/backend/transcript"
 )
@@ -24,6 +25,7 @@ func (h *TranscriptHandler) Register(r chi.Router) {
 }
 
 func (h *TranscriptHandler) fetch(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.GetUserID(r)
 	var req struct {
 		URL string `json:"url"`
 	}
@@ -48,7 +50,7 @@ func (h *TranscriptHandler) fetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.db.UpsertVideo(videoID, req.URL); err != nil {
+	if err := h.db.UpsertVideo(videoID, req.URL, userID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save video: "+err.Error())
 		return
 	}

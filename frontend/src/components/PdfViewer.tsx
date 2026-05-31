@@ -57,8 +57,14 @@ function PdfViewer({ url, initialPage, onSelection, onPageChange }: PdfViewerPro
     if (!pdf || !containerRef.current) return
 
     const container = containerRef.current
+    const containerWidth = container.clientWidth
     container.innerHTML = ''
     const dpr = window.devicePixelRatio || 1
+
+    // Calculate scale to fit container width
+    const basePage = await pdf.getPage(1)
+    const baseViewport = basePage.getViewport({ scale: 1.0 })
+    const fitScale = containerWidth / baseViewport.width
 
     // Clean up previous observer
     if (observerRef.current) {
@@ -93,7 +99,7 @@ function PdfViewer({ url, initialPage, onSelection, onPageChange }: PdfViewerPro
 
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i)
-      const viewport = page.getViewport({ scale: 1.5 })
+      const viewport = page.getViewport({ scale: fitScale })
 
       // Page wrapper
       const pageDiv = document.createElement('div')

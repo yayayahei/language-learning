@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/yayayahei/language-learning/backend/auth"
 	"github.com/yayayahei/language-learning/backend/db"
 )
 
@@ -23,6 +24,7 @@ func (h *RewatchHandler) Register(r chi.Router) {
 }
 
 func (h *RewatchHandler) start(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.GetUserID(r)
 	var req struct {
 		VideoID string `json:"video_id"`
 	}
@@ -32,8 +34,8 @@ func (h *RewatchHandler) start(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.db.Conn().Exec(
-		"INSERT INTO rewatch_sessions (video_id) VALUES (?)",
-		req.VideoID,
+		"INSERT INTO rewatch_sessions (video_id, user_id) VALUES (?, ?)",
+		req.VideoID, userID,
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to start rewatch session")
@@ -45,6 +47,7 @@ func (h *RewatchHandler) start(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RewatchHandler) summary(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.GetUserID(r)
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -56,8 +59,8 @@ func (h *RewatchHandler) summary(w http.ResponseWriter, r *http.Request) {
 	var startedAt, finishedAt string
 	var passed, struggled, newWP int
 	err = h.db.Conn().QueryRow(
-		"SELECT video_id, started_at, COALESCE(finished_at, ''), passed_count, struggled_count, new_weak_points_count FROM rewatch_sessions WHERE id = ?",
-		id,
+		"SELECT video_id, started_at, COALESCE(finished_at, ''), passed_count, struggled_count, new_weak_points_count FROM rewatch_sessions WHERE id = ? AND user_id = ?",
+		id, userID,
 	).Scan(&videoID, &startedAt, &finishedAt, &passed, &struggled, &newWP)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "session not found")

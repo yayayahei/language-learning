@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/yayayahei/language-learning/backend/auth"
 	"github.com/yayayahei/language-learning/backend/db"
 )
 
@@ -22,12 +23,13 @@ func (h *InteractionHandler) Register(r chi.Router) {
 }
 
 type interactionReq struct {
-	VideoID    string `json:"video_id"`
-	EventType  string `json:"event_type"`
+	VideoID     string `json:"video_id"`
+	EventType   string `json:"event_type"`
 	TimestampMs int64  `json:"timestamp_ms"`
 }
 
 func (h *InteractionHandler) create(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.GetUserID(r)
 	var reqs []interactionReq
 	if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -39,8 +41,8 @@ func (h *InteractionHandler) create(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		err := h.db.Conn().QueryRow(
-			"INSERT INTO interactions (video_id, event_type, timestamp_ms) VALUES (?, ?, ?)",
-			req.VideoID, req.EventType, req.TimestampMs,
+			"INSERT INTO interactions (video_id, event_type, timestamp_ms, user_id) VALUES (?, ?, ?, ?)",
+			req.VideoID, req.EventType, req.TimestampMs, userID,
 		).Err()
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to save interaction")
@@ -54,11 +56,12 @@ func (h *InteractionHandler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *InteractionHandler) list(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.GetUserID(r)
 	videoID := chi.URLParam(r, "videoId")
 
 	rows, err := h.db.Conn().Query(
-		"SELECT id, event_type, timestamp_ms, created_at FROM interactions WHERE video_id = ? ORDER BY timestamp_ms ASC",
-		videoID,
+		"SELECT id, event_type, timestamp_ms, created_at FROM interactions WHERE video_id = ? AND user_id = ? ORDER BY timestamp_ms ASC",
+		videoID, userID,
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "query failed")

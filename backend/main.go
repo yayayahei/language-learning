@@ -1,18 +1,22 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	_ "github.com/go-sql-driver/mysql"
 
+	"github.com/yayayahei/language-learning/backend/auth"
 	"github.com/yayayahei/language-learning/backend/db"
 	"github.com/yayayahei/language-learning/backend/handler"
+	"github.com/yayayahei/language-learning/backend/observability"
 	"github.com/yayayahei/language-learning/backend/transcript"
 )
 
@@ -24,22 +28,29 @@ func main() {
 
 	conn, err := sql.Open("mysql", dsn)
 	if err != nil {
-		log.Printf("WARNING: failed to open database: %v (running without DB)", err)
-		conn = nil
+		log.Fatalf("failed to open database: %v", err)
 	}
 
-	if conn != nil {
-		if err := conn.Ping(); err != nil {
-			log.Printf("WARNING: failed to ping database: %v (running without DB)", err)
-			conn.Close()
-			conn = nil
+	// Retry until MySQL is ready (e.g., Docker restart where MySQL starts slower).
+	for i := 0; i < 30; i++ {
+		if err := conn.Ping(); err == nil {
+			break
 		}
+		if i == 29 {
+			log.Fatalf("MySQL did not become ready after 30 retries")
+		}
+		time.Sleep(2 * time.Second)
 	}
-	if conn != nil {
-		fmt.Println("connected to MySQL")
-	} else {
-		fmt.Println("running without MySQL — API endpoints will return 503")
+	fmt.Println("connected to MySQL")
+
+	auth.InitSecret()
+
+	// Initialize OpenTelemetry (tracing, metrics, structured logging).
+	shutdown, err := observability.Setup(context.Background())
+	if err != nil {
+		log.Fatalf("failed to setup observability: %v", err)
 	}
+	defer shutdown()
 
 	database := db.New(conn)
 	if conn != nil {
@@ -52,7 +63,7 @@ func main() {
 	fetcher := transcript.NewFetcher()
 
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
+	r.Use(observability.Middleware)
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware)
 	r.Use(dbGuardMiddleware(database))
@@ -66,14 +77,24 @@ func main() {
 		}
 	})
 
-	handler.NewTranscriptHandler(database, fetcher).Register(r)
-	handler.NewVideoHandler(database).Register(r)
-	handler.NewInteractionHandler(database).Register(r)
-	handler.NewWeakPointHandler(database).Register(r)
-	handler.NewTrainingHandler(database).Register(r)
-	handler.NewRewatchHandler(database).Register(r)
-	handler.NewPDFHandler(database).Register(r)
-	handler.NewPreciousUsageHandler(database).Register(r)
+	r.Get("/api/metrics", observability.MetricsHandler)
+	r.Method("GET", "/metrics", observability.PrometheusHandler())
+
+	// Auth routes (unprotected)
+	handler.NewAuthHandler(database).Register(r)
+
+	// Protected API routes
+	r.Group(func(r chi.Router) {
+		r.Use(auth.Middleware)
+		handler.NewTranscriptHandler(database, fetcher).Register(r)
+		handler.NewVideoHandler(database).Register(r)
+		handler.NewInteractionHandler(database).Register(r)
+		handler.NewWeakPointHandler(database).Register(r)
+		handler.NewTrainingHandler(database).Register(r)
+		handler.NewRewatchHandler(database).Register(r)
+		handler.NewPDFHandler(database).Register(r)
+		handler.NewPreciousUsageHandler(database).Register(r)
+	})
 
 	// Serve React production build
 	staticDir := os.Getenv("STATIC_DIR")

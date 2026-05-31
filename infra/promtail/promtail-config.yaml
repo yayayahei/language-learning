@@ -1,0 +1,39 @@
+server:
+  http_listen_port: 9080
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: backend-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: language-learning
+          __path__: /var/log/backend/*.jsonl
+    pipeline_stages:
+      - json:
+          expressions:
+            time: time
+            level: level
+            msg: msg
+            trace_id: trace_id
+            span_id: span_id
+            method: method
+            path: path
+            status: status
+            duration_ms: duration_ms
+            remote_addr: remote_addr
+      - timestamp:
+          source: time
+          format: RFC3339Nano
+      - labels:
+          level:
+          trace_id:
+          method:
+          path:
+          status:

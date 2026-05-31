@@ -11,10 +11,11 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/yayayahei/language-learning/backend/auth"
 	"github.com/yayayahei/language-learning/backend/db"
 )
 
-const maxUploadSize = 50 << 20 // 50 MB
+const maxUploadSize = 50 << 20
 
 type PDFHandler struct {
 	db        *db.DB
@@ -40,6 +41,7 @@ func (h *PDFHandler) Register(r chi.Router) {
 }
 
 func (h *PDFHandler) upload(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.GetUserID(r)
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		writeError(w, http.StatusBadRequest, "File too large (max 50MB)")
@@ -53,7 +55,6 @@ func (h *PDFHandler) upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Validate file type
 	ext := strings.ToLower(filepath.Ext(header.Filename))
 	if ext != ".pdf" {
 		writeError(w, http.StatusBadRequest, "Only PDF files are supported")
@@ -78,8 +79,8 @@ func (h *PDFHandler) upload(w http.ResponseWriter, r *http.Request) {
 
 	title := strings.TrimSuffix(header.Filename, ".pdf")
 	_, err = h.db.Conn().Exec(
-		"INSERT INTO pdf_documents (id, filename, title, file_path) VALUES (?, ?, ?, ?)",
-		id, header.Filename, title, destPath,
+		"INSERT INTO pdf_documents (id, filename, title, file_path, user_id) VALUES (?, ?, ?, ?, ?)",
+		id, header.Filename, title, destPath, userID,
 	)
 	if err != nil {
 		os.Remove(destPath)
@@ -91,7 +92,11 @@ func (h *PDFHandler) upload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PDFHandler) list(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.Conn().Query("SELECT id, filename, title, last_page, created_at FROM pdf_documents ORDER BY created_at DESC")
+	userID, _ := auth.GetUserID(r)
+	rows, err := h.db.Conn().Query(
+		"SELECT id, filename, title, last_page, created_at FROM pdf_documents WHERE user_id = ? ORDER BY created_at DESC",
+		userID,
+	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to list PDFs")
 		return
@@ -118,25 +123,25 @@ func (h *PDFHandler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PDFHandler) delete(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.GetUserID(r)
 	id := chi.URLParam(r, "id")
 
-	// Get file path before deleting the record
 	var filePath string
-	err := h.db.Conn().QueryRow("SELECT file_path FROM pdf_documents WHERE id = ?", id).Scan(&filePath)
+	err := h.db.Conn().QueryRow(
+		"SELECT file_path FROM pdf_documents WHERE id = ? AND user_id = ?", id, userID,
+	).Scan(&filePath)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "PDF not found")
 		return
 	}
 
-	_, err = h.db.Conn().Exec("DELETE FROM pdf_documents WHERE id = ?", id)
+	_, err = h.db.Conn().Exec("DELETE FROM pdf_documents WHERE id = ? AND user_id = ?", id, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to delete PDF")
 		return
 	}
 
-	// Remove the file from disk
 	os.Remove(filePath)
-
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 

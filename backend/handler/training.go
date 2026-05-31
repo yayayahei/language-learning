@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/yayayahei/language-learning/backend/auth"
 	"github.com/yayayahei/language-learning/backend/db"
 )
 
@@ -36,19 +37,21 @@ type dueCard struct {
 }
 
 func (h *TrainingHandler) getDue(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.GetUserID(r)
 	rows, err := h.db.Conn().Query(`
 		SELECT wp.id, wp.text, wp.wp_type, wp.sentence,
-			       wp.video_id, wp.timestamp_ms,
-			   COALESCE(ts.easiness_factor, 2.5),
-			   COALESCE(ts.interval, 0),
-			   COALESCE(ts.repetitions, 0)
+		       wp.video_id, wp.timestamp_ms,
+		       COALESCE(ts.easiness_factor, 2.5),
+		       COALESCE(ts.interval, 0),
+		       COALESCE(ts.repetitions, 0)
 		FROM weak_points wp
 		JOIN training_state ts ON ts.weak_point_id = wp.id
 		WHERE wp.in_training = TRUE
 		  AND wp.grasped = FALSE
+		  AND wp.user_id = ?
 		  AND ts.next_review <= CURDATE()
 		ORDER BY ts.next_review ASC
-	`)
+	`, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "query failed")
 		return
@@ -69,7 +72,7 @@ func (h *TrainingHandler) getDue(w http.ResponseWriter, r *http.Request) {
 
 func (h *TrainingHandler) review(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ID     int64 `json:"id"`
+		ID      int64 `json:"id"`
 		Correct bool  `json:"correct"`
 		Quality int   `json:"quality"`
 	}
@@ -78,7 +81,6 @@ func (h *TrainingHandler) review(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch current state
 	var easiness float64
 	var interval int
 	var reps int
@@ -87,7 +89,6 @@ func (h *TrainingHandler) review(w http.ResponseWriter, r *http.Request) {
 		req.ID,
 	).Scan(&easiness, &interval, &reps)
 	if err != nil {
-		// Default values
 		easiness = 2.5
 		interval = 0
 		reps = 0
@@ -102,7 +103,6 @@ func (h *TrainingHandler) review(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// SM-2 algorithm
 	if quality >= 3 {
 		reps++
 		switch reps {
@@ -141,10 +141,10 @@ func (h *TrainingHandler) review(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"status":        "ok",
-		"interval":      interval,
-		"easiness":      easiness,
-		"repetitions":   reps,
-		"next_review":   nextReview.Format("2006-01-02"),
+		"status":      "ok",
+		"interval":    interval,
+		"easiness":    easiness,
+		"repetitions": reps,
+		"next_review": nextReview.Format("2006-01-02"),
 	})
 }

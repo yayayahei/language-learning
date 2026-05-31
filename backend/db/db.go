@@ -31,6 +31,17 @@ func (d *DB) InitSchema() error {
 		return ErrDBUnavailable
 	}
 	_, err := d.conn.Exec(`
+	CREATE TABLE IF NOT EXISTS users (
+		id BIGINT AUTO_INCREMENT PRIMARY KEY,
+		email VARCHAR(255) NOT NULL UNIQUE,
+		password_hash VARCHAR(255) NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = d.conn.Exec(`
 	CREATE TABLE IF NOT EXISTS videos (
 		id VARCHAR(32) PRIMARY KEY,
 		url VARCHAR(2048) NOT NULL,
@@ -161,48 +172,56 @@ func (d *DB) InitSchema() error {
 	d.conn.Exec("ALTER TABLE weak_points ADD COLUMN source_type ENUM('video', 'pdf') DEFAULT 'video'")
 	d.conn.Exec("ALTER TABLE weak_points ADD COLUMN source_id VARCHAR(36) DEFAULT ''")
 
+	// Migration: add user_id columns for user scoping (ignore error if already applied)
+	d.conn.Exec("ALTER TABLE videos ADD COLUMN user_id BIGINT NOT NULL DEFAULT 1")
+	d.conn.Exec("ALTER TABLE interactions ADD COLUMN user_id BIGINT NOT NULL DEFAULT 1")
+	d.conn.Exec("ALTER TABLE weak_points ADD COLUMN user_id BIGINT NOT NULL DEFAULT 1")
+	d.conn.Exec("ALTER TABLE rewatch_sessions ADD COLUMN user_id BIGINT NOT NULL DEFAULT 1")
+	d.conn.Exec("ALTER TABLE pdf_documents ADD COLUMN user_id BIGINT NOT NULL DEFAULT 1")
+	d.conn.Exec("ALTER TABLE precious_usages ADD COLUMN user_id BIGINT NOT NULL DEFAULT 1")
+
 	return nil
 }
 
 // Video methods
-func (d *DB) DeleteVideo(id string) error {
+func (d *DB) DeleteVideo(id string, userID int64) error {
 	if d.conn == nil {
 		return ErrDBUnavailable
 	}
-	_, err := d.conn.Exec("DELETE FROM videos WHERE id = ?", id)
+	_, err := d.conn.Exec("DELETE FROM videos WHERE id = ? AND user_id = ?", id, userID)
 	return err
 }
 
-func (d *DB) UpsertVideo(id, url string) error {
-	if d.conn == nil {
-		return ErrDBUnavailable
-	}
-	_, err := d.conn.Exec(
-		"INSERT INTO videos (id, url) VALUES (?, ?) ON DUPLICATE KEY UPDATE url = VALUES(url)",
-		id, url,
-	)
-	return err
-}
-
-func (d *DB) SavePlaybackPosition(videoID string, positionMs int64) error {
+func (d *DB) UpsertVideo(id, url string, userID int64) error {
 	if d.conn == nil {
 		return ErrDBUnavailable
 	}
 	_, err := d.conn.Exec(
-		"UPDATE videos SET playback_position_ms = ? WHERE id = ?",
-		positionMs, videoID,
+		"INSERT INTO videos (id, url, user_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE url = VALUES(url)",
+		id, url, userID,
 	)
 	return err
 }
 
-func (d *DB) GetPlaybackPosition(videoID string) (int64, error) {
+func (d *DB) SavePlaybackPosition(videoID string, userID int64, positionMs int64) error {
+	if d.conn == nil {
+		return ErrDBUnavailable
+	}
+	_, err := d.conn.Exec(
+		"UPDATE videos SET playback_position_ms = ? WHERE id = ? AND user_id = ?",
+		positionMs, videoID, userID,
+	)
+	return err
+}
+
+func (d *DB) GetPlaybackPosition(videoID string, userID int64) (int64, error) {
 	if d.conn == nil {
 		return 0, ErrDBUnavailable
 	}
 	var pos int64
 	err := d.conn.QueryRow(
-		"SELECT COALESCE(playback_position_ms, 0) FROM videos WHERE id = ?",
-		videoID,
+		"SELECT COALESCE(playback_position_ms, 0) FROM videos WHERE id = ? AND user_id = ?",
+		videoID, userID,
 	).Scan(&pos)
 	if err != nil {
 		return 0, nil
@@ -210,11 +229,11 @@ func (d *DB) GetPlaybackPosition(videoID string) (int64, error) {
 	return pos, nil
 }
 
-func (d *DB) ListVideos() ([]map[string]interface{}, error) {
+func (d *DB) ListVideos(userID int64) ([]map[string]interface{}, error) {
 	if d.conn == nil {
 		return nil, ErrDBUnavailable
 	}
-	rows, err := d.conn.Query("SELECT id, url, title, created_at FROM videos ORDER BY created_at DESC")
+	rows, err := d.conn.Query("SELECT id, url, title, created_at FROM videos WHERE user_id = ? ORDER BY created_at DESC", userID)
 	if err != nil {
 		return nil, err
 	}
@@ -292,4 +311,56 @@ func (d *DB) GetTranscript(videoID string) (string, []transcript.Segment, error)
 		return "", nil, err
 	}
 	return language, segments, nil
+}
+
+// User methods
+type User struct {
+	ID           int64  `json:"id"`
+	Email        string `json:"email"`
+	PasswordHash string `json:"-"`
+}
+
+func (d *DB) CreateUser(email, passwordHash string) (*User, error) {
+	if d.conn == nil {
+		return nil, ErrDBUnavailable
+	}
+	result, err := d.conn.Exec(
+		"INSERT INTO users (email, password_hash) VALUES (?, ?)",
+		email, passwordHash,
+	)
+	if err != nil {
+		return nil, err
+	}
+	id, _ := result.LastInsertId()
+	return &User{ID: id, Email: email}, nil
+}
+
+func (d *DB) GetUserByEmail(email string) (*User, error) {
+	if d.conn == nil {
+		return nil, ErrDBUnavailable
+	}
+	var u User
+	err := d.conn.QueryRow(
+		"SELECT id, email, password_hash FROM users WHERE email = ?",
+		email,
+	).Scan(&u.ID, &u.Email, &u.PasswordHash)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (d *DB) GetUserByID(id int64) (*User, error) {
+	if d.conn == nil {
+		return nil, ErrDBUnavailable
+	}
+	var u User
+	err := d.conn.QueryRow(
+		"SELECT id, email FROM users WHERE id = ?",
+		id,
+	).Scan(&u.ID, &u.Email)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
