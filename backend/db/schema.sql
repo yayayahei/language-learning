@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS weak_points (
     FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE SET NULL,
     INDEX idx_video_id (video_id),
     INDEX idx_in_training (in_training),
-    INDEX idx_grasped (grasped)
+    INDEX idx_grasped (grasped),
+    UNIQUE INDEX idx_text_user (text(255), user_id)
 );
 
 CREATE TABLE IF NOT EXISTS training_state (

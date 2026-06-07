@@ -76,6 +76,20 @@ func (h *WeakPointHandler) create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Check if weak point already exists for this user
+	var existingID int64
+	err := h.db.Conn().QueryRow(
+		"SELECT id FROM weak_points WHERE text = ? AND user_id = ? LIMIT 1",
+		req.Text, userID,
+	).Scan(&existingID)
+	if err == nil {
+		writeJSON(w, http.StatusConflict, map[string]interface{}{
+			"error": "weak point already exists",
+			"id":   existingID,
+		})
+		return
+	}
+
 	result, err := h.db.Conn().Exec(
 		"INSERT INTO weak_points (text, wp_type, video_id, sentence, timestamp_ms, user_id, source_type, source_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 		req.Text, req.WPType, vid, req.Sentence, req.TimestampMs, userID, st, sid,

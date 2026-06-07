@@ -180,6 +180,11 @@ func (d *DB) InitSchema() error {
 	d.conn.Exec("ALTER TABLE pdf_documents ADD COLUMN user_id BIGINT NOT NULL DEFAULT 1")
 	d.conn.Exec("ALTER TABLE precious_usages ADD COLUMN user_id BIGINT NOT NULL DEFAULT 1")
 
+	// Migration: remove duplicate weak points (keep oldest id per text + user_id)
+	d.conn.Exec("DELETE w1 FROM weak_points w1 INNER JOIN weak_points w2 WHERE w1.id > w2.id AND w1.text = w2.text AND w1.user_id = w2.user_id")
+	// Migration: add unique index on weak_points(text, user_id) to prevent future duplicates
+	d.conn.Exec("ALTER TABLE weak_points ADD UNIQUE INDEX idx_text_user (text(255), user_id)")
+
 	return nil
 }
 

@@ -50,6 +50,9 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
       if (res.ok) {
         setDoneLabel(`Saved as weak point (${wpType})`)
         setDone(true)
+      } else if (res.status === 409) {
+        setDoneLabel('Already saved as weak point')
+        setDone(true)
       } else {
         alert('Failed to save weak point')
         setSaving(false)
