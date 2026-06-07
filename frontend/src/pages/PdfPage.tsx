@@ -94,6 +94,7 @@ function PdfPage() {
 
   const handleSelection = (text: string, pageNum: number, x: number, y: number) => {
     setSelection({ text, pageNum, x, y })
+    navigator.clipboard.writeText(text).catch(() => {})
   }
 
   const handlePageChange = (pageNum: number) => {

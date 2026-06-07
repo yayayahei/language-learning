@@ -9,14 +9,10 @@ type SelectionMenuProps = {
   onClose: () => void
 }
 
-type Action = 'weak-point' | 'precious-usage' | null
-
 function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuProps) {
-  const [action, setAction] = useState<Action>(null)
-  const [wpType, setWpType] = useState('word')
-  const [puType, setPuType] = useState('word')
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
+  const [doneLabel, setDoneLabel] = useState('')
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -36,7 +32,7 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
     }
   }, [onClose])
 
-  const handleSaveWeakPoint = async () => {
+  const handleSaveWeakPoint = async (wpType: string) => {
     setSaving(true)
     try {
       const res = await fetch('/api/weak-points', {
@@ -52,6 +48,7 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
         }),
       })
       if (res.ok) {
+        setDoneLabel(`Saved as weak point (${wpType})`)
         setDone(true)
       } else {
         alert('Failed to save weak point')
@@ -63,7 +60,7 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
     }
   }
 
-  const handleSavePreciousUsage = async () => {
+  const handleSavePreciousUsage = async (puType: string) => {
     setSaving(true)
     try {
       const res = await fetch('/api/precious-usages', {
@@ -78,6 +75,7 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
         }),
       })
       if (res.ok) {
+        setDoneLabel(`Saved as precious usage (${puType})`)
         setDone(true)
       } else {
         alert('Failed to save precious usage')
@@ -89,59 +87,41 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
     }
   }
 
+  useEffect(() => {
+    if (done) {
+      const timer = setTimeout(onClose, 1500)
+      return () => clearTimeout(timer)
+    }
+  }, [done, onClose])
+
   if (done) {
     return (
       <div className="selection-menu" style={{ left: x, top: y }} ref={menuRef}>
-        <div className="selection-done">Saved!</div>
-        <button onClick={onClose}>Close</button>
-      </div>
-    )
-  }
-
-  // Step 1: Choose action
-  if (!action) {
-    return (
-      <div className="selection-menu" style={{ left: x, top: y }} ref={menuRef}>
-        <div className="selection-text">"{text.slice(0, 50)}{text.length > 50 ? '...' : ''}"</div>
-        <button onClick={() => setAction('weak-point')}>Add to Weak Points</button>
-        <button onClick={() => setAction('precious-usage')}>Save as Precious Usage</button>
-      </div>
-    )
-  }
-
-  // Step 2: Pick type and confirm
-  if (action === 'weak-point') {
-    return (
-      <div className="selection-menu" style={{ left: x, top: y }} ref={menuRef}>
-        <div className="selection-text">Add to Weak Points</div>
-        <div className="popup-type">
-          <label><input type="radio" name="wp-type" value="word" checked={wpType === 'word'} onChange={() => setWpType('word')} /> Word</label>
-          <label><input type="radio" name="wp-type" value="phrase" checked={wpType === 'phrase'} onChange={() => setWpType('phrase')} /> Phrase</label>
-          <label><input type="radio" name="wp-type" value="idiom" checked={wpType === 'idiom'} onChange={() => setWpType('idiom')} /> Idiom</label>
-        </div>
-        <div className="selection-actions">
-          <button onClick={handleSaveWeakPoint} disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-          <button onClick={onClose}>Cancel</button>
-        </div>
+        <div className="selection-done">{doneLabel}</div>
       </div>
     )
   }
 
   return (
     <div className="selection-menu" style={{ left: x, top: y }} ref={menuRef}>
-      <div className="selection-text">Save to Precious Usage</div>
-      <div className="popup-type">
-        <label><input type="radio" name="pu-type" value="word" checked={puType === 'word'} onChange={() => setPuType('word')} /> Word</label>
-        <label><input type="radio" name="pu-type" value="phrase" checked={puType === 'phrase'} onChange={() => setPuType('phrase')} /> Phrase</label>
-        <label><input type="radio" name="pu-type" value="expression" checked={puType === 'expression'} onChange={() => setPuType('expression')} /> Expression</label>
+      <div className="selection-text">"{text.slice(0, 50)}{text.length > 50 ? '...' : ''}"</div>
+
+      <div className="selection-group">
+        <div className="selection-group-label">Weak Points</div>
+        <div className="selection-types">
+          <button onClick={() => handleSaveWeakPoint('word')} disabled={saving}>Word</button>
+          <button onClick={() => handleSaveWeakPoint('phrase')} disabled={saving}>Phrase</button>
+          <button onClick={() => handleSaveWeakPoint('idiom')} disabled={saving}>Idiom</button>
+        </div>
       </div>
-      <div className="selection-actions">
-        <button onClick={handleSavePreciousUsage} disabled={saving}>
-          {saving ? 'Saving...' : 'Save'}
-        </button>
-        <button onClick={onClose}>Cancel</button>
+
+      <div className="selection-group">
+        <div className="selection-group-label">Precious Usage</div>
+        <div className="selection-types">
+          <button onClick={() => handleSavePreciousUsage('word')} disabled={saving}>Word</button>
+          <button onClick={() => handleSavePreciousUsage('phrase')} disabled={saving}>Phrase</button>
+          <button onClick={() => handleSavePreciousUsage('expression')} disabled={saving}>Expression</button>
+        </div>
       </div>
     </div>
   )

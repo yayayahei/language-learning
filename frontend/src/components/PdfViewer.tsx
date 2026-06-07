@@ -142,6 +142,11 @@ function PdfViewer({ url, initialPage, onSelection, onPageChange }: PdfViewerPro
 
       // Render text layer
       const textContent = await page.getTextContent()
+      const scale = viewport.transform[0]
+      let prevRight = 0
+      let prevTop = 0
+      let prevFontSize = 0
+      let prevStr = ''
       for (const item of textContent.items as Array<{
         str: string
         transform: number[]
@@ -154,6 +159,28 @@ function PdfViewer({ url, initialPage, onSelection, onPageChange }: PdfViewerPro
         const fontSize = Math.hypot(tx[0], tx[1])
         const left = tx[4]
         const top = tx[5] - fontSize
+
+        // Insert space between words when a visual gap exists
+        const sameLine = prevStr && Math.abs(top - prevTop) < prevFontSize * 0.3
+        const gap = left - prevRight
+        if (sameLine && gap > fontSize * 0.3 && !prevStr.endsWith(' ') && !item.str.startsWith(' ')) {
+          const spaceSpan = document.createElement('span')
+          spaceSpan.textContent = ' '
+          spaceSpan.style.position = 'absolute'
+          spaceSpan.style.left = `${prevRight}px`
+          spaceSpan.style.top = `${prevTop}px`
+          spaceSpan.style.fontSize = `${prevFontSize}px`
+          spaceSpan.style.fontFamily = 'serif'
+          spaceSpan.style.color = 'transparent'
+          spaceSpan.style.pointerEvents = 'auto'
+          spaceSpan.dataset.pageNum = String(i)
+          textLayer.appendChild(spaceSpan)
+        }
+
+        prevRight = left + item.width * scale
+        prevTop = top
+        prevFontSize = fontSize
+        prevStr = item.str
 
         const span = document.createElement('span')
         span.textContent = item.str
