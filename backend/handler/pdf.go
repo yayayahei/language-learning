@@ -37,6 +37,7 @@ func (h *PDFHandler) Register(r chi.Router) {
 	r.Get("/api/pdfs/{id}/file", h.serveFile)
 	r.Get("/api/pdfs/{id}/position", h.getPosition)
 	r.Put("/api/pdfs/{id}/position", h.savePosition)
+	r.Post("/api/pdfs/{id}/position", h.savePosition)
 	r.Delete("/api/pdfs/{id}", h.delete)
 }
 
@@ -165,9 +166,11 @@ func (h *PDFHandler) getPosition(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	page, err := h.db.GetPDFPosition(id)
 	if err != nil {
+		fmt.Printf("[POSITION] GET FAILED id=%s err=%v\n", id, err)
 		writeError(w, http.StatusInternalServerError, "Failed to get position")
 		return
 	}
+	fmt.Printf("[POSITION] GET id=%s page=%d\n", id, page)
 	writeJSON(w, http.StatusOK, map[string]interface{}{"last_page": page})
 }
 
@@ -177,17 +180,21 @@ func (h *PDFHandler) savePosition(w http.ResponseWriter, r *http.Request) {
 		Page int `json:"page"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		fmt.Printf("[POSITION] SAVE FAILED parse body: id=%s err=%v\n", id, err)
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	if req.Page < 1 {
+		fmt.Printf("[POSITION] SAVE FAILED bad page: id=%s page=%d\n", id, req.Page)
 		writeError(w, http.StatusBadRequest, "page must be >= 1")
 		return
 	}
 	if err := h.db.SavePDFPosition(id, req.Page); err != nil {
+		fmt.Printf("[POSITION] SAVE FAILED db: id=%s page=%d err=%v\n", id, req.Page, err)
 		writeError(w, http.StatusInternalServerError, "Failed to save position")
 		return
 	}
+	fmt.Printf("[POSITION] SAVED id=%s page=%d\n", id, req.Page)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

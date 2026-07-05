@@ -185,6 +185,20 @@ func (d *DB) InitSchema() error {
 	// Migration: add unique index on weak_points(text, user_id) to prevent future duplicates
 	d.conn.Exec("ALTER TABLE weak_points ADD UNIQUE INDEX idx_text_user (text(255), user_id)")
 
+	// Migration: add repeat tracking columns to weak_points
+	d.conn.Exec("ALTER TABLE weak_points ADD COLUMN repeat_count INT DEFAULT 1")
+	d.conn.Exec("ALTER TABLE weak_points ADD COLUMN last_added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+
+	// Migration: add unique index on precious_usages to detect duplicates
+	d.conn.Exec("ALTER TABLE precious_usages ADD UNIQUE INDEX idx_pu_text_user (text(255), user_id)")
+	// Migration: add repeat tracking columns to precious_usages
+	d.conn.Exec("ALTER TABLE precious_usages ADD COLUMN repeat_count INT DEFAULT 1")
+	d.conn.Exec("ALTER TABLE precious_usages ADD COLUMN last_added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+
+	// Migration: remove ENUM restriction on wp_type and pu_type
+	d.conn.Exec("ALTER TABLE weak_points MODIFY wp_type VARCHAR(32) NOT NULL DEFAULT ''")
+	d.conn.Exec("ALTER TABLE precious_usages MODIFY pu_type VARCHAR(32) NOT NULL DEFAULT ''")
+
 	return nil
 }
 

@@ -6,11 +6,65 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString()
 
+export type OutlineItem = {
+  title: string
+  pageNumber: number
+  items: OutlineItem[]
+}
+
 type PdfViewerProps = {
   url: string
   initialPage?: number
+  targetPage?: number
   onSelection?: (text: string, pageNum: number, x: number, y: number) => void
   onPageChange?: (pageNum: number) => void
+  onOutlineLoaded?: (outline: OutlineItem[]) => void
+  onLoaded?: (numPages: number) => void
+}
+
+// Resolve a destination (string name or explicit array) to page number
+async function resolveDest(
+  pdf: pdfjsLib.PDFDocumentProxy,
+  dest: string | Array<any>,
+): Promise<number | null> {
+  try {
+    let explicitDest: Array<any>
+    if (typeof dest === 'string') {
+      explicitDest = (await pdf.getDestination(dest)) as Array<any>
+      if (!explicitDest) return null
+    } else {
+      explicitDest = dest
+    }
+    // The page reference is always the first element
+    const pageRef = explicitDest[0]
+    if (pageRef && typeof pageRef === 'object' && pageRef.num !== undefined) {
+      const pageIndex = await pdf.getPageIndex(pageRef)
+      return pageIndex + 1
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// Recursively resolve outline items' destinations to page numbers
+async function resolveOutline(
+  pdf: pdfjsLib.PDFDocumentProxy,
+  items: Array<any>,
+): Promise<OutlineItem[]> {
+  const result: OutlineItem[] = []
+  for (const item of items) {
+    let pageNumber = 0
+    if (item.dest) {
+      const pn = await resolveDest(pdf, item.dest)
+      if (pn) pageNumber = pn
+    }
+    const children = item.items?.length
+      ? await resolveOutline(pdf, item.items)
+      : []
+    result.push({ title: item.title, pageNumber, items: children })
+  }
+  return result
 }
 
 // Multiply two 3x2 affine transform matrices
@@ -25,13 +79,15 @@ function multiplyTransform(m1: number[], m2: number[]): number[] {
   ]
 }
 
-function PdfViewer({ url, initialPage, onSelection, onPageChange }: PdfViewerProps) {
+function PdfViewer({ url, initialPage, targetPage, onSelection, onPageChange, onOutlineLoaded, onLoaded }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [pdf, setPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const hasScrolledRef = useRef(false)
   const observerRef = useRef<IntersectionObserver | null>(null)
+  const renderGenRef = useRef(0)
+  const scrollToRef = useRef(0)
+  const [ready, setReady] = useState(false)
   const onPageChangeRef = useRef(onPageChange)
   onPageChangeRef.current = onPageChange
 
@@ -39,12 +95,29 @@ function PdfViewer({ url, initialPage, onSelection, onPageChange }: PdfViewerPro
   useEffect(() => {
     setLoading(true)
     setError('')
-    hasScrolledRef.current = false
+    setReady(false)
+    scrollToRef.current = 0
     const loadingTask = pdfjsLib.getDocument(url)
     loadingTask.promise
-      .then((doc) => {
+      .then(async (doc) => {
         setPdf(doc)
         setLoading(false)
+        console.log('[POSITION] PDF loaded, pages:', doc.numPages)
+        onLoaded?.(doc.numPages)
+        // Extract outline (catalog / table of contents)
+        if (onOutlineLoaded) {
+          try {
+            const rawOutline = await doc.getOutline()
+            if (rawOutline?.length) {
+              const resolved = await resolveOutline(doc, rawOutline)
+              onOutlineLoaded(resolved)
+            } else {
+              onOutlineLoaded([])
+            }
+          } catch {
+            onOutlineLoaded([])
+          }
+        }
       })
       .catch(() => {
         setError('Failed to load PDF')
@@ -58,7 +131,11 @@ function PdfViewer({ url, initialPage, onSelection, onPageChange }: PdfViewerPro
 
     const container = containerRef.current
     const containerWidth = container.clientWidth
+    // Store the page to scroll to after all pages render
+    const target = scrollToRef.current
+    console.log('[POSITION] renderAllPages start, gen:', renderGenRef.current + 1, 'target:', target)
     container.innerHTML = ''
+    const gen = ++renderGenRef.current
     const dpr = window.devicePixelRatio || 1
 
     // Calculate scale to fit container width
@@ -98,7 +175,10 @@ function PdfViewer({ url, initialPage, onSelection, onPageChange }: PdfViewerPro
     )
 
     for (let i = 1; i <= pdf.numPages; i++) {
+      // Abort if a newer render pass has started
+      if (renderGenRef.current !== gen) return
       const page = await pdf.getPage(i)
+      if (renderGenRef.current !== gen) return
       const viewport = page.getViewport({ scale: fitScale })
 
       // Page wrapper
@@ -142,34 +222,61 @@ function PdfViewer({ url, initialPage, onSelection, onPageChange }: PdfViewerPro
 
       // Render text layer
       const textContent = await page.getTextContent()
+      const styles: Record<string, { ascent: number; descent: number }> =
+        (textContent as any).styles || {}
       const scale = viewport.transform[0]
-      let prevRight = 0
-      let prevTop = 0
-      let prevFontSize = 0
-      let prevStr = ''
+
+      // Resolve text items with their viewport positions, then sort by
+      // reading order so the browser's double-click word selection matches
+      // the visual layout instead of internal PDF rendering order.
+      interface ResolvedItem {
+        str: string
+        left: number
+        top: number
+        right: number
+        fontHeight: number
+      }
+      const resolved: ResolvedItem[] = []
       for (const item of textContent.items as Array<{
         str: string
         transform: number[]
         width: number
         height: number
+        fontName?: string
       }>) {
         if (!item.str) continue
-
         const tx = multiplyTransform(viewport.transform, item.transform)
-        const fontSize = Math.hypot(tx[0], tx[1])
+        const fontHeight = Math.hypot(tx[2], tx[3])
         const left = tx[4]
-        const top = tx[5] - fontSize
+        const st = item.fontName ? styles[item.fontName] : null
+        const ascentRatio = st ? st.ascent / (st.ascent + Math.abs(st.descent)) : 0.8
+        const top = tx[5] - fontHeight * ascentRatio
+        const right = left + item.width * scale
+        resolved.push({ str: item.str, left, top, right, fontHeight })
+      }
 
+      // Sort by line (top) then by column (left) for visual reading order
+      resolved.sort((a, b) => {
+        const lineDiff = a.top - b.top
+        if (Math.abs(lineDiff) > a.fontHeight * 0.3) return lineDiff
+        return a.left - b.left
+      })
+
+      let prevRight = 0
+      let prevTop = 0
+      let prevFontHeight = 0
+      let prevStr = ''
+      for (const item of resolved) {
         // Insert space between words when a visual gap exists
-        const sameLine = prevStr && Math.abs(top - prevTop) < prevFontSize * 0.3
-        const gap = left - prevRight
-        if (sameLine && gap > fontSize * 0.3 && !prevStr.endsWith(' ') && !item.str.startsWith(' ')) {
+        const sameLine = prevStr && Math.abs(item.top - prevTop) < prevFontHeight * 0.3
+        const gap = item.left - prevRight
+        if (sameLine && gap > item.fontHeight * 0.3 && !prevStr.endsWith(' ') && !item.str.startsWith(' ')) {
           const spaceSpan = document.createElement('span')
           spaceSpan.textContent = ' '
           spaceSpan.style.position = 'absolute'
           spaceSpan.style.left = `${prevRight}px`
           spaceSpan.style.top = `${prevTop}px`
-          spaceSpan.style.fontSize = `${prevFontSize}px`
+          spaceSpan.style.fontSize = `${prevFontHeight}px`
           spaceSpan.style.fontFamily = 'serif'
           spaceSpan.style.color = 'transparent'
           spaceSpan.style.pointerEvents = 'auto'
@@ -177,17 +284,17 @@ function PdfViewer({ url, initialPage, onSelection, onPageChange }: PdfViewerPro
           textLayer.appendChild(spaceSpan)
         }
 
-        prevRight = left + item.width * scale
-        prevTop = top
-        prevFontSize = fontSize
+        prevRight = item.right
+        prevTop = item.top
+        prevFontHeight = item.fontHeight
         prevStr = item.str
 
         const span = document.createElement('span')
         span.textContent = item.str
         span.style.position = 'absolute'
-        span.style.left = `${left}px`
-        span.style.top = `${top}px`
-        span.style.fontSize = `${fontSize}px`
+        span.style.left = `${item.left}px`
+        span.style.top = `${item.top}px`
+        span.style.fontSize = `${item.fontHeight}px`
         span.style.fontFamily = 'serif'
         span.style.color = 'transparent'
         span.style.pointerEvents = 'auto'
@@ -195,37 +302,58 @@ function PdfViewer({ url, initialPage, onSelection, onPageChange }: PdfViewerPro
         textLayer.appendChild(span)
       }
     }
+
+    // Scroll to saved position after all pages are rendered
+    if (target > 1 && renderGenRef.current === gen) {
+      const el = container.querySelector(`[data-page-num="${target}"]`)
+      console.log('[POSITION] renderAllPages end, target:', target, 'found:', !!el, 'gen:', gen)
+      if (el) {
+        el.scrollIntoView({ behavior: 'instant', block: 'start' })
+        console.log('[POSITION] scrolled to page:', target)
+        scrollToRef.current = 0
+      }
+    } else if (target <= 1) {
+      console.log('[POSITION] renderAllPages end, no target, gen:', gen)
+    }
+    setReady(true)
   }, [pdf])
+
+  // Track initialPage for scroll-after-render
+  const initialPageRef = useRef(initialPage)
+  useEffect(() => {
+    console.log('[POSITION] PdfViewer initialPage effect:', initialPage, 'prev:', initialPageRef.current)
+    if (initialPage && initialPage > 1 && initialPage !== initialPageRef.current) {
+      initialPageRef.current = initialPage
+      scrollToRef.current = initialPage
+      console.log('[POSITION] scrollToRef set to:', initialPage)
+      if (containerRef.current?.children.length) {
+        const el = containerRef.current.querySelector(`[data-page-num="${initialPage}"]`)
+        console.log('[POSITION] pages exist, scrolling now, found el:', !!el)
+        if (el) el.scrollIntoView({ behavior: 'instant', block: 'start' })
+      } else {
+        console.log('[POSITION] no pages yet, will scroll after render')
+      }
+    }
+  }, [initialPage])
+
+  // Track targetPage for catalog navigation
+  const targetPageRef = useRef(targetPage)
+  useEffect(() => {
+    if (targetPage && targetPage !== targetPageRef.current) {
+      targetPageRef.current = targetPage
+      scrollToRef.current = targetPage
+      if (containerRef.current?.children.length) {
+        const el = containerRef.current.querySelector(`[data-page-num="${targetPage}"]`)
+        if (el) el.scrollIntoView({ behavior: 'instant', block: 'start' })
+      }
+    }
+  }, [targetPage])
 
   useEffect(() => {
     if (pdf) {
       renderAllPages()
     }
   }, [pdf, renderAllPages])
-
-  // Scroll to initial page after pages are rendered
-  const scrollToPage = useCallback((pageNum: number) => {
-    if (pageNum <= 1) return
-    const attemptScroll = (retries: number) => {
-      const el = containerRef.current?.querySelector(`[data-page-num="${pageNum}"]`)
-      if (el) {
-        el.scrollIntoView({ behavior: 'instant', block: 'start' })
-        return
-      }
-      if (retries > 0) {
-        requestAnimationFrame(() => attemptScroll(retries - 1))
-      }
-    }
-    // Retry up to 50 frames (~1 second) until the target page is in the DOM
-    attemptScroll(50)
-  }, [])
-
-  useEffect(() => {
-    if (!loading && initialPage && initialPage > 1 && !hasScrolledRef.current) {
-      hasScrolledRef.current = true
-      scrollToPage(initialPage)
-    }
-  }, [loading, initialPage, scrollToPage])
 
   // Handle text selection across all pages
   const handlePointerUp = (e: React.PointerEvent) => {
@@ -270,7 +398,7 @@ function PdfViewer({ url, initialPage, onSelection, onPageChange }: PdfViewerPro
       </p>
       <div
         ref={containerRef}
-        className="pdf-scroll-container"
+        className={`pdf-scroll-container${ready ? ' pdf-ready' : ''}`}
         onPointerUp={handlePointerUp}
       />
     </div>

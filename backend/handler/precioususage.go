@@ -38,8 +38,35 @@ func (h *PreciousUsageHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Text == "" || req.PUType == "" || req.SourceType == "" || req.SourceID == "" {
-		writeError(w, http.StatusBadRequest, "text, pu_type, source_type, and source_id are required")
+	if req.Text == "" || req.SourceType == "" || req.SourceID == "" {
+		writeError(w, http.StatusBadRequest, "text, source_type, and source_id are required")
+		return
+	}
+
+	// Check if precious usage already exists for this user
+	var existingID int64
+	err := h.db.Conn().QueryRow(
+		"SELECT id FROM precious_usages WHERE text = ? AND user_id = ? LIMIT 1",
+		req.Text, userID,
+	).Scan(&existingID)
+	if err == nil {
+		// Duplicate: increment repeat count instead of rejecting
+		h.db.Conn().Exec(
+			"UPDATE precious_usages SET repeat_count = repeat_count + 1, last_added_at = NOW() WHERE id = ?",
+			existingID,
+		)
+		var repeatCount int
+		var lastAddedAt string
+		h.db.Conn().QueryRow(
+			"SELECT COALESCE(repeat_count, 1), COALESCE(last_added_at, created_at) FROM precious_usages WHERE id = ?",
+			existingID,
+		).Scan(&repeatCount, &lastAddedAt)
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"id":            existingID,
+			"repeat":        true,
+			"repeat_count":  repeatCount,
+			"last_added_at": lastAddedAt,
+		})
 		return
 	}
 
@@ -53,7 +80,7 @@ func (h *PreciousUsageHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id, _ := result.LastInsertId()
-	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": id})
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": id, "repeat_count": 1})
 }
 
 func (h *PreciousUsageHandler) list(w http.ResponseWriter, r *http.Request) {

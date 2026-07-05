@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import PdfViewer from '../components/PdfViewer'
+import type { OutlineItem } from '../components/PdfViewer'
+import PdfToolbar from '../components/PdfToolbar'
+import PdfCatalog from '../components/PdfCatalog'
 import SelectionMenu from '../components/SelectionMenu'
+import FloatingDict from '../components/FloatingDict'
 
 type PdfDoc = {
   id: string
@@ -26,6 +30,11 @@ function PdfPage() {
   const [uploadError, setUploadError] = useState('')
   const [selection, setSelection] = useState<Selection | null>(null)
   const [initialPage, setInitialPage] = useState<number | undefined>(undefined)
+  const [outline, setOutline] = useState<OutlineItem[]>([])
+  const [catalogVisible, setCatalogVisible] = useState(false)
+  const [targetPage, setTargetPage] = useState<number | undefined>(undefined)
+  const [currentPage, setCurrentPage] = useState<number | undefined>(undefined)
+  const [totalPages, setTotalPages] = useState<number | undefined>(undefined)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchPdfs = () => {
@@ -41,6 +50,14 @@ function PdfPage() {
   const [searchParams] = useSearchParams()
   const pageParam = searchParams.get('page')
 
+  // Reset state when switching PDFs
+  useEffect(() => {
+    setOutline([])
+    setCatalogVisible(false)
+    setTotalPages(undefined)
+    setCurrentPage(undefined)
+  }, [pdfId])
+
   // Fetch saved position or use query param
   useEffect(() => {
     if (pdfId) {
@@ -50,9 +67,13 @@ function PdfPage() {
         fetch(`/api/pdfs/${pdfId}/position`)
           .then((r) => r.json())
           .then((data) => {
+            console.log('[POSITION] fetched for', pdfId, ':', data.last_page)
             setInitialPage(data.last_page || 1)
           })
-          .catch(() => setInitialPage(1))
+          .catch((e) => {
+            console.error('[POSITION] fetch failed:', e)
+            setInitialPage(1)
+          })
       }
     } else {
       setInitialPage(undefined)
@@ -97,39 +118,84 @@ function PdfPage() {
     navigator.clipboard.writeText(text).catch(() => {})
   }
 
+  const lastPageRef = useRef(0)
+
+  const savePosition = (page: number) => {
+    if (!pdfId || page < 1) return
+    fetch(`/api/pdfs/${pdfId}/position`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ page }),
+      keepalive: true,
+    })
+  }
+
   const handlePageChange = (pageNum: number) => {
-    if (!pdfId) return
-    // Debounce: save position at most once per second
+    setCurrentPage(pageNum)
+    lastPageRef.current = pageNum
+    console.log('[POSITION] pageChange:', pageNum)
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
-      fetch(`/api/pdfs/${pdfId}/position`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page: pageNum }),
-      })
+      console.log('[POSITION] saving (debounced):', pageNum)
+      savePosition(pageNum)
     }, 1000)
   }
 
-  // Clean up timer on unmount
+  const handleCatalogNavigate = (pageNumber: number) => {
+    setTargetPage(pageNumber)
+  }
+
+  // Save position on unmount or when pdfId changes
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
+      // Flush immediately on unmount
+      if (lastPageRef.current > 1) {
+        const body = JSON.stringify({ page: lastPageRef.current })
+        const blob = new Blob([body], { type: 'application/json' })
+        navigator.sendBeacon(`/api/pdfs/${pdfId}/position`, blob)
+      }
     }
-  }, [])
+  }, [pdfId])
 
   // PDF reader view when a pdfId is selected
   if (pdfId) {
     return (
       <div className="pdf-reader-page">
-        <button className="back-btn" onClick={() => navigate('/pdf')}>
-          Back to PDFs
-        </button>
-        <PdfViewer
-          url={`/api/pdfs/${pdfId}/file`}
-          initialPage={initialPage}
-          onSelection={handleSelection}
-          onPageChange={handlePageChange}
-        />
+        <button className="pdf-exit-btn" onClick={() => navigate('/')} title="Exit reading">✕</button>
+        <div className="pdf-reader-layout">
+          <div className="pdf-toolbar-wrap">
+            <PdfToolbar
+              hasOutline={outline.length > 0}
+              catalogVisible={catalogVisible}
+              onToggleCatalog={() => setCatalogVisible(!catalogVisible)}
+              currentPage={currentPage}
+              totalPages={totalPages}
+            />
+            <PdfCatalog
+              outline={outline}
+              visible={catalogVisible}
+              onNavigate={(page) => {
+                handleCatalogNavigate(page)
+                setCatalogVisible(false)
+              }}
+              currentPage={currentPage}
+            />
+          </div>
+          <PdfViewer
+            url={`/api/pdfs/${pdfId}/file`}
+            initialPage={initialPage}
+            targetPage={targetPage}
+            onSelection={handleSelection}
+            onPageChange={handlePageChange}
+            onOutlineLoaded={setOutline}
+            onLoaded={setTotalPages}
+          />
+        </div>
+        <FloatingDict pdfId={pdfId} />
         {selection && (
           <SelectionMenu
             text={selection.text}

@@ -82,6 +82,7 @@ func main() {
 
 	// Auth routes (unprotected)
 	handler.NewAuthHandler(database).Register(r)
+	handler.NewTranslateHandler().Register(r)
 
 	// Protected API routes
 	r.Group(func(r chi.Router) {

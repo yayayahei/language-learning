@@ -44,8 +44,8 @@ func (h *WeakPointHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Text == "" || req.WPType == "" || req.Sentence == "" {
-		writeError(w, http.StatusBadRequest, "text, wp_type, and sentence are required")
+	if req.Text == "" || req.Sentence == "" {
+		writeError(w, http.StatusBadRequest, "text and sentence are required")
 		return
 	}
 	if req.VideoID == "" && req.SourceID == "" {
@@ -83,9 +83,22 @@ func (h *WeakPointHandler) create(w http.ResponseWriter, r *http.Request) {
 		req.Text, userID,
 	).Scan(&existingID)
 	if err == nil {
-		writeJSON(w, http.StatusConflict, map[string]interface{}{
-			"error": "weak point already exists",
-			"id":   existingID,
+		// Duplicate: increment repeat count instead of rejecting
+		h.db.Conn().Exec(
+			"UPDATE weak_points SET repeat_count = repeat_count + 1, last_added_at = NOW() WHERE id = ?",
+			existingID,
+		)
+		var repeatCount int
+		var lastAddedAt string
+		h.db.Conn().QueryRow(
+			"SELECT COALESCE(repeat_count, 1), COALESCE(last_added_at, created_at) FROM weak_points WHERE id = ?",
+			existingID,
+		).Scan(&repeatCount, &lastAddedAt)
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"id":           existingID,
+			"repeat":       true,
+			"repeat_count": repeatCount,
+			"last_added_at": lastAddedAt,
 		})
 		return
 	}
@@ -106,7 +119,7 @@ func (h *WeakPointHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id, _ := result.LastInsertId()
-	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": id})
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": id, "repeat_count": 1})
 }
 
 func (h *WeakPointHandler) list(w http.ResponseWriter, r *http.Request) {

@@ -13,7 +13,23 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
   const [doneLabel, setDoneLabel] = useState('')
+  const [translation, setTranslation] = useState('')
+  const [audioUS, setAudioUS] = useState('')
   const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    fetch('/api/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.translation) setTranslation(data.translation)
+        if (data.audio_us) setAudioUS(data.audio_us)
+      })
+      .catch(() => {})
+  }, [text])
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -32,56 +48,30 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
     }
   }, [onClose])
 
-  const handleSaveWeakPoint = async (wpType: string) => {
+  const handleSave = async (endpoint: string, label: string) => {
     setSaving(true)
     try {
-      const res = await fetch('/api/weak-points', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text,
-          wp_type: wpType,
           sentence: text,
           timestamp_ms: pageNum,
           source_type: 'pdf',
           source_id: pdfId,
         }),
       })
+      const data = await res.json()
       if (res.ok) {
-        setDoneLabel(`Saved as weak point (${wpType})`)
-        setDone(true)
-      } else if (res.status === 409) {
-        setDoneLabel('Already saved as weak point')
+        if (data.repeat) {
+          setDoneLabel(`${label} — added again (${data.repeat_count} times)`)
+        } else {
+          setDoneLabel(`${label} — saved`)
+        }
         setDone(true)
       } else {
-        alert('Failed to save weak point')
-        setSaving(false)
-      }
-    } catch {
-      alert('Network error')
-      setSaving(false)
-    }
-  }
-
-  const handleSavePreciousUsage = async (puType: string) => {
-    setSaving(true)
-    try {
-      const res = await fetch('/api/precious-usages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          pu_type: puType,
-          source_type: 'pdf',
-          source_id: pdfId,
-          sentence: '',
-        }),
-      })
-      if (res.ok) {
-        setDoneLabel(`Saved as precious usage (${puType})`)
-        setDone(true)
-      } else {
-        alert('Failed to save precious usage')
+        alert('Failed to save')
         setSaving(false)
       }
     } catch {
@@ -107,24 +97,22 @@ function SelectionMenu({ text, x, y, pageNum, pdfId, onClose }: SelectionMenuPro
 
   return (
     <div className="selection-menu" style={{ left: x, top: y }} ref={menuRef}>
-      <div className="selection-text">"{text.slice(0, 50)}{text.length > 50 ? '...' : ''}"</div>
-
-      <div className="selection-group">
-        <div className="selection-group-label">Weak Points</div>
-        <div className="selection-types">
-          <button onClick={() => handleSaveWeakPoint('word')} disabled={saving}>Word</button>
-          <button onClick={() => handleSaveWeakPoint('phrase')} disabled={saving}>Phrase</button>
-          <button onClick={() => handleSaveWeakPoint('idiom')} disabled={saving}>Idiom</button>
-        </div>
+      <div className="selection-text">
+        "{text.slice(0, 50)}{text.length > 50 ? '...' : ''}"
+        {audioUS && (
+          <button className="selection-speaker" onClick={() => new Audio(audioUS).play()} title="Play US">🔊</button>
+        )}
       </div>
 
-      <div className="selection-group">
-        <div className="selection-group-label">Precious Usage</div>
-        <div className="selection-types">
-          <button onClick={() => handleSavePreciousUsage('word')} disabled={saving}>Word</button>
-          <button onClick={() => handleSavePreciousUsage('phrase')} disabled={saving}>Phrase</button>
-          <button onClick={() => handleSavePreciousUsage('expression')} disabled={saving}>Expression</button>
-        </div>
+      {translation && <div className="selection-translation">{translation}</div>}
+
+      <div className="selection-actions">
+        <button onClick={() => handleSave('/api/weak-points', 'Weak point')} disabled={saving}>
+          Weak point
+        </button>
+        <button onClick={() => handleSave('/api/precious-usages', 'Precious usage')} disabled={saving}>
+          Precious usage
+        </button>
       </div>
     </div>
   )

@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS interactions (
 CREATE TABLE IF NOT EXISTS weak_points (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     text VARCHAR(1024) NOT NULL,
-    wp_type ENUM('word', 'phrase', 'idiom') NOT NULL,
+    wp_type VARCHAR(32) NOT NULL DEFAULT '',
     video_id VARCHAR(36) NULL,
     sentence TEXT NOT NULL,
     timestamp_ms BIGINT NOT NULL,
@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS pdf_documents (
 CREATE TABLE IF NOT EXISTS precious_usages (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     text VARCHAR(1024) NOT NULL,
-    pu_type ENUM('word', 'phrase', 'expression') NOT NULL,
+    pu_type VARCHAR(32) NOT NULL DEFAULT '',
     source_type ENUM('video', 'pdf') NOT NULL,
     source_id VARCHAR(36) NOT NULL,
     sentence TEXT,

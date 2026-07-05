@@ -657,6 +657,12 @@ input, select {
   align-items: center;
   gap: 0;
   width: 100%;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.pdf-scroll-container.pdf-ready {
+  opacity: 1;
 }
 
 .pdf-page {
@@ -676,6 +682,32 @@ input, select {
   background: rgba(79, 70, 229, 0.35);
 }
 
+.pdf-exit-btn {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 250;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.pdf-exit-btn:hover {
+  opacity: 1;
+  color: var(--text);
+}
+
 .pdf-viewer-status {
   text-align: center;
   padding: 32px;
@@ -688,12 +720,6 @@ input, select {
 
 /* PDF Page */
 .pdf-page h2 {
-  margin-bottom: 16px;
-}
-
-.pdf-reader-page .back-btn {
-  background: var(--border);
-  color: var(--text);
   margin-bottom: 16px;
 }
 
@@ -762,6 +788,34 @@ input, select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.selection-speaker {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.selection-speaker:hover {
+  opacity: 0.7;
+}
+
+.selection-translation {
+  font-size: 14px;
+  color: var(--primary);
+  font-weight: 600;
+  padding: 4px 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  max-width: 250px;
+  white-space: pre-line;
 }
 
 .selection-menu button {
@@ -840,6 +894,298 @@ input, select {
   font-size: 12px;
   color: var(--text-muted);
   margin-left: auto;
+}
+
+/* PDF Toolbar */
+.pdf-reader-layout {
+  width: 100%;
+}
+
+.pdf-toolbar-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  margin-bottom: 8px;
+}
+
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-height: 36px;
+}
+
+.pdf-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pdf-toolbar-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.pdf-toolbar-btn:hover {
+  color: var(--text);
+  border-color: var(--primary);
+}
+
+.pdf-toolbar-btn.active {
+  background: rgba(79, 70, 229, 0.1);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.pdf-toolbar-info {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.pdf-toolbar-hide {
+  font-size: 12px;
+  padding: 2px 8px;
+  line-height: 1;
+}
+
+.pdf-toolbar-restore {
+  display: block;
+  margin-left: auto;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 8px;
+}
+
+.pdf-toolbar-restore:hover {
+  color: var(--text);
+  border-color: var(--primary);
+}
+
+/* PDF Catalog panel */
+.pdf-catalog-panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 99;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  min-width: 240px;
+  max-width: 300px;
+  overflow: hidden;
+}
+
+.catalog-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.catalog-item {
+  margin: 0;
+}
+
+.catalog-row {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: 3px 12px;
+  cursor: default;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.catalog-row.active {
+  background: rgba(79, 70, 229, 0.08);
+}
+
+.catalog-toggle {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 10px;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+}
+
+.catalog-toggle:hover {
+  color: var(--text);
+}
+
+.catalog-title {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-title.clickable {
+  cursor: pointer;
+  color: var(--primary);
+}
+
+.catalog-title.clickable:hover {
+  text-decoration: underline;
+}
+
+.catalog-page {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.catalog-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.catalog-empty {
+  padding: 16px 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* Floating dictionary */
+.floating-dict {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.floating-dict-input-wrap {
+  display: flex;
+  align-items: center;
+  background: var(--card-bg);
+  border: 1px solid var(--primary);
+  border-radius: 24px;
+  padding: 6px 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.floating-dict-input {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  width: 240px;
+  outline: none;
+  padding: 4px 0;
+}
+
+.floating-dict-input::placeholder {
+  color: var(--border);
+  font-size: 13px;
+}
+
+.floating-dict-speaker {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.floating-dict-speaker:hover {
+  opacity: 0.7;
+}
+
+.floating-dict-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.floating-dict-result {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.floating-dict-translation {
+  font-size: 14px;
+  color: var(--primary);
+  font-weight: 600;
+  white-space: pre-line;
+  text-align: center;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.floating-dict-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.floating-dict-actions button {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.floating-dict-actions button:hover {
+  background: var(--primary);
+  color: #fff;
+}
+
+.floating-dict-saved {
+  font-size: 12px;
+  color: var(--success);
+  font-weight: 600;
 }
 
 /* Responsive */
